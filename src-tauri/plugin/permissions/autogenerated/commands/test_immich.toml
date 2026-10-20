@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-test-immich"
+description = "Enables the test_immich command without any pre-configured scope."
+commands.allow = ["test_immich"]
+
+[[permission]]
+identifier = "deny-test-immich"
+description = "Denies the test_immich command without any pre-configured scope."
+commands.deny = ["test_immich"]

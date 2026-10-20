@@ -1,0 +1,24 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Everything the importer's own UI calls."
+permissions = [
+  "allow-dev-autoload-source",
+  "allow-list-volumes",
+  "allow-list-folders",
+  "allow-save-video-thumb",
+  "allow-scan-source",
+  "allow-close-source",
+  "allow-set-visible",
+  "allow-get-settings",
+  "allow-save-settings",
+  "allow-set-dedupe-config",
+  "allow-rebuild-dest-index",
+  "allow-example-path",
+  "allow-get-immich-settings",
+  "allow-save-immich-settings",
+  "allow-forget-immich-key",
+  "allow-test-immich",
+  "allow-start-import",
+  "allow-cancel-import",
+]

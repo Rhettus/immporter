@@ -1,0 +1,64 @@
+/* The importer inside another app. Tailwind's theme and utilities, but not
+   its global reset (preflight), which would restyle the host page: a reset
+   scoped to .immporter stands in for it. Only this folder is scanned for
+   classes, never the host's sources. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./";
+@import "./tokens.css";
+
+/* The palette; a host maps these to its own colours on .immporter. */
+.immporter {
+  --app-bg-primary: rgb(24, 24, 24);
+  --app-bg-secondary: rgb(35, 35, 35);
+  --app-surface: rgb(28, 28, 28);
+  --app-card-active: rgb(43, 43, 43);
+  --app-button-text: rgb(0, 0, 0);
+  --app-text-primary: rgb(232, 234, 237);
+  --app-text-secondary: rgb(158, 158, 158);
+  --app-accent: rgb(255, 255, 255);
+  --app-border-color: rgb(45, 45, 45);
+  --app-hover-color: rgb(255, 255, 255);
+  --app-success: rgb(74, 222, 128);
+  --app-warning: rgb(251, 191, 36);
+  --app-danger: rgb(248, 113, 113);
+  height: 100%;
+  background: var(--app-bg-primary);
+  color: var(--app-text-primary);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* The parts of preflight the importer relies on, under .immporter only. */
+@layer base {
+  :where(.immporter) *,
+  :where(.immporter) ::before,
+  :where(.immporter) ::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
+  }
+  :where(.immporter) :is(h1, h2, h3, h4) { font-size: inherit; font-weight: inherit; }
+  :where(.immporter) :is(ol, ul, menu) { list-style: none; }
+  :where(.immporter) :is(img, svg, video, canvas) { display: block; vertical-align: middle; }
+  :where(.immporter) :is(img, video) { max-width: 100%; height: auto; }
+  :where(.immporter) :is(button, input, select, textarea) {
+    font: inherit;
+    color: inherit;
+    background-color: transparent;
+    border-radius: 0;
+    opacity: 1;
+  }
+  :where(.immporter) :is(button, [role="button"]) { cursor: pointer; }
+  :where(.immporter) :disabled { cursor: default; }
+  :where(.immporter) ::-webkit-scrollbar { width: 10px; height: 10px; }
+  :where(.immporter) ::-webkit-scrollbar-thumb {
+    background: var(--app-card-active);
+    border-radius: 8px;
+    border: 2px solid var(--app-bg-primary);
+  }
+  :where(.immporter) ::-webkit-scrollbar-track { background: transparent; }
+}

@@ -1,0 +1,25 @@
+/* The palette as Tailwind colours, and the small helper classes; shared by
+   the standalone theme (theme.css) and the embedded one (embed.css). */
+@theme inline {
+  --color-bg-primary: var(--app-bg-primary);
+  --color-bg-secondary: var(--app-bg-secondary);
+  --color-surface: var(--app-surface);
+  --color-card-active: var(--app-card-active);
+  --color-button-text: var(--app-button-text);
+  --color-text-primary: var(--app-text-primary);
+  --color-text-secondary: var(--app-text-secondary);
+  --color-accent: var(--app-accent);
+  --color-border-color: var(--app-border-color);
+  --color-hover-color: var(--app-hover-color);
+  --color-success: var(--app-success);
+  --color-warning: var(--app-warning);
+  --color-danger: var(--app-danger);
+}
+
+.section-title {
+  @apply text-[11px] font-semibold uppercase tracking-wider text-text-secondary;
+}
+
+.input {
+  @apply w-full rounded-md border border-border-color bg-bg-primary px-2 py-1.5 text-[12px] outline-none focus:border-text-secondary;
+}

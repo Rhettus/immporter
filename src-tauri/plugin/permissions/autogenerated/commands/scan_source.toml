@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-scan-source"
+description = "Enables the scan_source command without any pre-configured scope."
+commands.allow = ["scan_source"]
+
+[[permission]]
+identifier = "deny-scan-source"
+description = "Denies the scan_source command without any pre-configured scope."
+commands.deny = ["scan_source"]

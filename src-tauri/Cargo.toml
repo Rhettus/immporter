@@ -1,0 +1,30 @@
+[workspace]
+members = ["plugin"]
+
+[package]
+name = "sdcard-importer"
+version = "0.5.0"
+description = "Fast, verified SD card photo importer"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-immporter = { path = "plugin" }
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
+
+# Image decoding and hashing are painfully slow unoptimised; keep deps fast in dev.
+[profile.dev.package."*"]
+opt-level = 3

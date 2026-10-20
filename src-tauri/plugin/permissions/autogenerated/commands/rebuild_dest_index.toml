@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-rebuild-dest-index"
+description = "Enables the rebuild_dest_index command without any pre-configured scope."
+commands.allow = ["rebuild_dest_index"]
+
+[[permission]]
+identifier = "deny-rebuild-dest-index"
+description = "Denies the rebuild_dest_index command without any pre-configured scope."
+commands.deny = ["rebuild_dest_index"]

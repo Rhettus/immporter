@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-save-video-thumb"
+description = "Enables the save_video_thumb command without any pre-configured scope."
+commands.allow = ["save_video_thumb"]
+
+[[permission]]
+identifier = "deny-save-video-thumb"
+description = "Denies the save_video_thumb command without any pre-configured scope."
+commands.deny = ["save_video_thumb"]

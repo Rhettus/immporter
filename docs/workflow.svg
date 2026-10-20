@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 458" width="1320" height="458" font-family="Virgil, 'Chalkboard SE', 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive">
+<title>Photo workflow: cull in FastRawViewer, import with Immporter, edit in RapidRAW, browse in Immich</title>
+<defs><marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M1,1 L9,5 L1,9" fill="none" stroke="#868e96" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M29.6,104.2 L150.4,104.0 Q160.0,105.0 160.1,114.7 L158.9,215.0 Q160.0,225.0 148.9,224.8 L29.0,224.0 Q20.0,225.0 19.8,215.8 L19.1,114.3 Q20.0,105.0 30.3,106.1 Z" fill="#e9ecef" stroke="none"/>
+<path d="M30.2,104.8 L151.1,103.9 Q160.0,105.0 160.9,114.5 L159.1,214.1 Q160.0,225.0 149.5,225.8 L29.2,225.2 Q20.0,225.0 20.3,214.7 L20.1,114.0 Q20.0,105.0 28.9,104.3 Z" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M30.4,104.8 L149.6,105.2 Q160.0,105.0 159.9,114.5 L160.7,215.5 Q160.0,225.0 149.4,225.2 L30.1,225.9 Q20.0,225.0 20.6,214.5 L21.2,114.1 Q20.0,105.0 29.8,105.6 Z" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+<text x="90.0" y="154" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e1e1e">SD card</text>
+<text x="90.0" y="180" text-anchor="middle" font-size="14" fill="#1e1e1e">DCIM/</text>
+<text x="90.0" y="198" text-anchor="middle" font-size="14" fill="#1e1e1e">camera files</text>
+<path d="M269.2,105.0 L423.9,105.4 Q435.0,105.0 435.6,115.2 L435.9,214.6 Q435.0,225.0 425.5,225.2 L270.2,224.9 Q260.0,225.0 260.8,216.1 L259.9,115.4 Q260.0,105.0 268.9,105.5 Z" fill="#a5d8ff" stroke="none"/>
+<path d="M270.4,106.2 L425.8,104.5 Q435.0,105.0 434.7,115.4 L433.9,214.9 Q435.0,225.0 424.2,224.1 L268.9,225.6 Q260.0,225.0 259.1,214.4 L259.7,115.9 Q260.0,105.0 269.0,104.9 Z" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M270.1,105.9 L425.8,105.9 Q435.0,105.0 434.5,114.8 L434.7,215.9 Q435.0,225.0 426.1,224.2 L269.2,224.4 Q260.0,225.0 259.4,215.0 L260.2,114.4 Q260.0,105.0 268.8,104.8 Z" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+<text x="347.5" y="145" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e1e1e">FastRawViewer</text>
+<text x="347.5" y="171" text-anchor="middle" font-size="14" font-style="italic" fill="#1e1e1e">Cull</text>
+<text x="347.5" y="189" text-anchor="middle" font-size="14" fill="#1e1e1e">picks → _Selected</text>
+<text x="347.5" y="207" text-anchor="middle" font-size="14" fill="#1e1e1e">culls → _Rejected</text>
+<path d="M544.7,75.2 L746.1,75.5 Q755.0,75.0 755.0,85.3 L755.4,243.9 Q755.0,255.0 746.0,255.7 L545.9,255.7 Q535.0,255.0 534.7,244.8 L534.0,85.3 Q535.0,75.0 543.9,74.0 Z" fill="#ffd8a8" stroke="none"/>
+<path d="M544.3,74.2 L744.6,73.9 Q755.0,75.0 753.8,84.2 L754.0,244.7 Q755.0,255.0 743.9,255.9 L545.3,254.2 Q535.0,255.0 534.4,244.6 L534.7,84.1 Q535.0,75.0 545.8,76.2 Z" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M544.9,75.0 L744.0,74.0 Q755.0,75.0 754.6,84.4 L755.8,244.2 Q755.0,255.0 743.9,256.1 L545.1,254.2 Q535.0,255.0 535.1,243.9 L535.1,86.1 Q535.0,75.0 545.9,75.5 Z" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+<text x="645.0" y="127" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e1e1e">Immporter</text>
+<text x="645.0" y="153" text-anchor="middle" font-size="14" font-style="italic" fill="#1e1e1e">Import</text>
+<text x="645.0" y="171" text-anchor="middle" font-size="14" fill="#1e1e1e">pick _Selected</text>
+<text x="645.0" y="189" text-anchor="middle" font-size="14" fill="#1e1e1e">verify every copy by hash</text>
+<text x="645.0" y="207" text-anchor="middle" font-size="14" fill="#1e1e1e">skip duplicates</text>
+<text x="645.0" y="225" text-anchor="middle" font-size="14" fill="#1e1e1e">card stays read-only</text>
+<path d="M879.4,104.7 L1034.2,105.7 Q1045.0,105.0 1045.1,115.7 L1044.6,214.3 Q1045.0,225.0 1035.7,226.2 L880.8,225.7 Q870.0,225.0 870.8,215.6 L869.3,115.0 Q870.0,105.0 879.7,103.9 Z" fill="#b2f2bb" stroke="none"/>
+<path d="M878.9,104.5 L1034.4,105.5 Q1045.0,105.0 1046.1,114.9 L1046.0,216.2 Q1045.0,225.0 1036.1,224.7 L879.3,224.3 Q870.0,225.0 869.3,214.3 L870.3,116.0 Q870.0,105.0 880.8,105.0 Z" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M880.4,105.7 L1034.0,105.4 Q1045.0,105.0 1046.0,115.7 L1045.6,214.9 Q1045.0,225.0 1034.2,225.7 L879.6,225.7 Q870.0,225.0 871.1,214.8 L869.8,116.1 Q870.0,105.0 880.5,104.2 Z" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+<text x="957.5" y="154" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e1e1e">Library folder</text>
+<text x="957.5" y="180" text-anchor="middle" font-size="14" fill="#1e1e1e">~/Pictures/</text>
+<text x="957.5" y="198" text-anchor="middle" font-size="14" fill="#1e1e1e">2026/October/…</text>
+<path d="M1144.1,104.2 L1291.0,105.7 Q1300.0,105.0 1299.2,115.8 L1301.2,215.4 Q1300.0,225.0 1289.6,225.1 L1144.1,223.8 Q1135.0,225.0 1136.1,215.4 L1135.1,116.0 Q1135.0,105.0 1144.8,105.9 Z" fill="#d0bfff" stroke="none"/>
+<path d="M1145.8,104.3 L1289.4,104.5 Q1300.0,105.0 1299.4,115.2 L1299.4,214.8 Q1300.0,225.0 1289.1,226.0 L1144.6,224.9 Q1135.0,225.0 1135.2,216.0 L1134.8,116.0 Q1135.0,105.0 1145.0,105.1 Z" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M1145.1,103.8 L1289.9,104.2 Q1300.0,105.0 1298.8,115.7 L1299.2,214.9 Q1300.0,225.0 1290.5,225.1 L1144.6,225.0 Q1135.0,225.0 1135.1,215.7 L1134.1,115.1 Q1135.0,105.0 1144.4,104.5 Z" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+<text x="1217.5" y="145" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e1e1e">Immich</text>
+<text x="1217.5" y="171" text-anchor="middle" font-size="14" font-style="italic" fill="#1e1e1e">Library / DAM</text>
+<text x="1217.5" y="189" text-anchor="middle" font-size="14" fill="#1e1e1e">browse · search</text>
+<text x="1217.5" y="207" text-anchor="middle" font-size="14" fill="#1e1e1e">share</text>
+<path d="M880.7,300.0 L1035.1,300.6 Q1045.0,300.0 1046.0,309.9 L1045.3,385.0 Q1045.0,395.0 1035.0,395.5 L879.9,395.1 Q870.0,395.0 869.9,386.1 L870.5,310.9 Q870.0,300.0 881.1,299.4 Z" fill="#ffec99" stroke="none"/>
+<path d="M880.1,301.1 L1035.8,299.1 Q1045.0,300.0 1044.1,309.9 L1044.0,384.4 Q1045.0,395.0 1034.0,395.4 L880.7,396.0 Q870.0,395.0 869.2,385.5 L870.4,309.1 Q870.0,300.0 880.9,301.1 Z" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M879.3,301.1 L1034.8,300.0 Q1045.0,300.0 1046.2,310.8 L1044.2,384.8 Q1045.0,395.0 1035.0,394.6 L879.3,394.6 Q870.0,395.0 870.5,383.8 L870.1,309.9 Q870.0,300.0 878.8,299.6 Z" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+<text x="957.5" y="336" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e1e1e">RapidRAW</text>
+<text x="957.5" y="362" text-anchor="middle" font-size="14" font-style="italic" fill="#1e1e1e">Edit</text>
+<text x="957.5" y="380" text-anchor="middle" font-size="14" fill="#1e1e1e">non-destructive, sidecars</text>
+<path d="M166.0,165.0 L254.0,165.0" fill="none" stroke="#868e96" stroke-width="1.8" stroke-linecap="round" marker-end="url(#head)"/>
+<text x="210" y="155" text-anchor="middle" font-size="14" fill="#868e96">cull on card</text>
+<path d="M441.0,165.0 L529.0,165.0" fill="none" stroke="#868e96" stroke-width="1.8" stroke-linecap="round" marker-end="url(#head)"/>
+<text x="485" y="155" text-anchor="middle" font-size="14" fill="#868e96">_Selected</text>
+<path d="M761.0,165.0 L864.0,165.0" fill="none" stroke="#868e96" stroke-width="1.8" stroke-linecap="round" marker-end="url(#head)"/>
+<text x="812" y="155" text-anchor="middle" font-size="14" fill="#868e96">verified copies</text>
+<path d="M1051.0,165.0 L1129.0,165.0" fill="none" stroke="#868e96" stroke-width="1.8" stroke-linecap="round" marker-end="url(#head)"/>
+<text x="1090" y="155" text-anchor="middle" font-size="14" fill="#868e96">scans</text>
+<path d="M957.5,231.0 L957.5,294.0" fill="none" stroke="#868e96" stroke-width="1.8" stroke-linecap="round" marker-start="url(#head)" marker-end="url(#head)"/>
+<text x="1010" y="262" text-anchor="middle" font-size="14" fill="#868e96">edit in place</text>
+<path d="M645.0,261.0 L645.1,425.0 L1217.0,425.6 L1217.5,231.0" fill="none" stroke="#868e96" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="7 6" marker-end="url(#head)"/>
+<text x="931" y="447" text-anchor="middle" font-size="14" fill="#868e96">already in Immich?  (API, asset.read)</text>
+</svg>

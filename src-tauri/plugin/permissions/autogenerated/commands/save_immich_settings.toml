@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-save-immich-settings"
+description = "Enables the save_immich_settings command without any pre-configured scope."
+commands.allow = ["save_immich_settings"]
+
+[[permission]]
+identifier = "deny-save-immich-settings"
+description = "Denies the save_immich_settings command without any pre-configured scope."
+commands.deny = ["save_immich_settings"]

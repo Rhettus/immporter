@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-get-immich-settings"
+description = "Enables the get_immich_settings command without any pre-configured scope."
+commands.allow = ["get_immich_settings"]
+
+[[permission]]
+identifier = "deny-get-immich-settings"
+description = "Denies the get_immich_settings command without any pre-configured scope."
+commands.deny = ["get_immich_settings"]
