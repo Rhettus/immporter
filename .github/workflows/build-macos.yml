@@ -1,0 +1,37 @@
+name: Build macOS DMG
+
+# Run by hand from the Actions tab (any branch), or on pushes to feature branches.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["feature/**"]
+
+jobs:
+  dmg:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # Universal binary: runs on Apple Silicon and Intel Macs. Unsigned.
+      - run: npx tauri build --target universal-apple-darwin --bundles dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Immporter-macos-dmg-${{ github.sha }}
+          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
