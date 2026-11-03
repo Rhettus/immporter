@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor:
+        update-types: [minor, patch]
+  # The workspace root: covers the app and plugin/ (one Cargo.lock).
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+    groups:
+      cargo-minor:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

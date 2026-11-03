@@ -23,6 +23,8 @@
   --app-success: rgb(74, 222, 128);
   --app-warning: rgb(251, 191, 36);
   --app-danger: rgb(248, 113, 113);
+  --app-highlight: rgb(64, 70, 82);
+  --app-highlight-ring: rgb(135, 145, 160);
   height: 100%;
   background: var(--app-bg-primary);
   color: var(--app-text-primary);

@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Build macOS DMG
+
+# Run by hand from the Actions tab (any branch), or on pushes to feature branches.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["feature/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  dmg:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # Universal binary: runs on Apple Silicon and Intel Macs. Unsigned.
+      - run: npx tauri build --target universal-apple-darwin --bundles dmg
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Immporter-macos-dmg-${{ github.sha }}
+          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error

@@ -10,6 +10,9 @@ interface Props {
   visibleIds: number[];
 }
 
+/** Padding of the highlighted cell around the photo; the negative margin keeps the grid layout unchanged. */
+const HL_PAD = 3;
+
 function formatCapture(iso: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -18,9 +21,11 @@ function formatCapture(iso: string | null) {
 
 function PhotoTile({ item, size, visibleIds }: Props) {
   const isSelected = useStore((s) => s.selected.has(item.id));
+  const isHighlighted = useStore((s) => s.highlighted.has(item.id));
   const policy = useStore((s) => s.settings);
   const outcome = useStore((s) => s.outcomes.get(item.id));
-  const toggle = useStore((s) => s.toggle);
+  const highlight = useStore((s) => s.highlight);
+  const toggleCheck = useStore((s) => s.toggleCheck);
   const immichUrl = useStore((s) => s.immich?.url);
   const canSelect = selectable(item, policy);
   const dimmed =
@@ -58,16 +63,21 @@ function PhotoTile({ item, size, visibleIds }: Props) {
 
   return (
     <div
-      className="group flex flex-col"
-      style={{ width: size }}
+      className={`flex flex-col rounded-lg transition-colors ${
+        isHighlighted ? "bg-[var(--app-highlight)] shadow-[0_0_0_1px_var(--app-highlight-ring)]" : ""
+      }`}
+      style={{ width: size + HL_PAD * 2, margin: -HL_PAD, padding: HL_PAD }}
+      data-tile
       title={title}
-      onClick={(e) => canSelect && toggle(item.id, e.shiftKey, visibleIds)}
+      onClick={(e) =>
+        highlight(item.id, e.shiftKey ? "range" : e.metaKey || e.ctrlKey ? "add" : "single", visibleIds)
+      }
       onDoubleClick={() => immichMatch && immichUrl && openUrl(`${immichUrl.replace(/\/+$/, "")}/photos/${immichMatch.assetId}`)}
     >
       <div
         className={`relative overflow-hidden rounded-md bg-surface transition-all ${
           isSelected ? "ring-2 ring-accent" : "ring-1 ring-border-color"
-        } ${canSelect ? "cursor-pointer" : "cursor-default"}`}
+        } cursor-pointer`}
         style={{ width: size, height: size }}
       >
         {item.thumb ? (
@@ -89,15 +99,21 @@ function PhotoTile({ item, size, visibleIds }: Props) {
         )}
 
         {canSelect && (
-          <div
-            className={`absolute left-2 top-2 flex h-5 w-5 items-center justify-center rounded border transition-opacity ${
+          <button
+            title={isHighlighted ? "Check or uncheck all highlighted photos" : isSelected ? "Don't import" : "Import"}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleCheck(item.id, visibleIds);
+            }}
+            onDoubleClick={(e) => e.stopPropagation()}
+            className={`absolute left-2 top-2 flex h-[22px] w-[22px] items-center justify-center rounded-[5px] border-[1.5px] ${
               isSelected
                 ? "border-accent bg-accent text-button-text"
-                : "border-text-secondary/70 bg-black/40 opacity-0 group-hover:opacity-100"
+                : "border-text-primary/80 bg-black/45 hover:bg-black/70"
             }`}
           >
-            {isSelected && <Check size={13} strokeWidth={3} />}
-          </div>
+            {isSelected && <Check size={14} strokeWidth={3.5} />}
+          </button>
         )}
 
         <div className="absolute right-2 top-2 flex gap-1">
