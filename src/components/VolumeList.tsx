@@ -77,7 +77,8 @@ export default function VolumeList() {
 function VolumeNode({ volume: v, disabled }: { volume: Volume; disabled: boolean }) {
   const source = useStore((s) => s.source);
   const openSource = useStore((s) => s.openSource);
-  const [expanded, setExpanded] = useState(false);
+  // A card opens with its folders showing (see AutoOpen).
+  const [expanded, setExpanded] = useState(v.hasDcim || v.removable);
   const active = v.mountPoint === source;
   const Icon = v.hasDcim || v.removable ? CardSim : HardDrive;
   const used = v.total > 0 ? 1 - v.available / v.total : 0;
@@ -104,13 +105,28 @@ function VolumeNode({ volume: v, disabled }: { volume: Volume; disabled: boolean
           </div>
         </button>
       </div>
-      {expanded && <FolderChildren path={v.mountPoint} depth={1} disabled={disabled} />}
+      {expanded && <FolderChildren path={v.mountPoint} depth={1} disabled={disabled} auto="dcim" />}
     </div>
   );
 }
 
+/** Which folders start expanded when a card's tree first shows: `DCIM`, then
+ * the camera folders inside it (e.g. `100OMSYS`), so FastRawViewer's
+ * `_Selected` / `_Rejected` are one click away. */
+type AutoOpen = "dcim" | "camera" | undefined;
+
 /** Lazily loaded subfolders of `path`. */
-function FolderChildren({ path, depth, disabled }: { path: string; depth: number; disabled: boolean }) {
+function FolderChildren({
+  path,
+  depth,
+  disabled,
+  auto,
+}: {
+  path: string;
+  depth: number;
+  disabled: boolean;
+  auto?: AutoOpen;
+}) {
   const [folders, setFolders] = useState<FolderEntry[] | null>(null);
   useEffect(() => {
     let live = true;
@@ -126,17 +142,30 @@ function FolderChildren({ path, depth, disabled }: { path: string; depth: number
   return (
     <>
       {folders.map((f) => (
-        <FolderNode key={f.path} folder={f} depth={depth} disabled={disabled} />
+        <FolderNode key={f.path} folder={f} depth={depth} disabled={disabled} auto={auto} />
       ))}
     </>
   );
 }
 
-function FolderNode({ folder: f, depth, disabled }: { folder: FolderEntry; depth: number; disabled: boolean }) {
+function FolderNode({
+  folder: f,
+  depth,
+  disabled,
+  auto,
+}: {
+  folder: FolderEntry;
+  depth: number;
+  disabled: boolean;
+  auto?: AutoOpen;
+}) {
   const source = useStore((s) => s.source);
   const openSource = useStore((s) => s.openSource);
-  // Open the tree down to the picked folder.
-  const [expanded, setExpanded] = useState(() => source?.startsWith(f.path + "/") ?? false);
+  const isDcim = auto === "dcim" && f.name.toUpperCase() === "DCIM";
+  // Open the tree down to the picked folder, and a card's DCIM/camera folders.
+  const [expanded, setExpanded] = useState(
+    () => (source?.startsWith(f.path + "/") ?? false) || (f.hasChildren && (isDcim || auto === "camera")),
+  );
   const active = source === f.path;
 
   return (
@@ -158,7 +187,9 @@ function FolderNode({ folder: f, depth, disabled }: { folder: FolderEntry; depth
           {f.photos > 0 && <span className="ml-auto text-[11px] text-text-secondary">{f.photos}</span>}
         </button>
       </div>
-      {expanded && <FolderChildren path={f.path} depth={depth + 1} disabled={disabled} />}
+      {expanded && (
+        <FolderChildren path={f.path} depth={depth + 1} disabled={disabled} auto={isDcim ? "camera" : undefined} />
+      )}
     </div>
   );
 }

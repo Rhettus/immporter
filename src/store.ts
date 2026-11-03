@@ -24,7 +24,11 @@ interface State {
   scanError: string | null;
   gen: number;
   items: ItemView[];
+  /** The checked items: what Import copies. */
   selected: Set<number>;
+  /** Highlighted tiles (click / Shift-click / ⌘-click). A checkbox click on one of
+   * them applies to the whole group. Highlighting never changes the checks. */
+  highlighted: Set<number>;
   /** Items the user toggled by hand; auto-selection leaves them alone. */
   touched: Set<number>;
   anchor: number | null;
@@ -52,7 +56,13 @@ interface State {
   setVolumes: (v: Volume[]) => void;
   openSource: (path: string) => Promise<void>;
   applyUpdates: (gen: number, items: ItemView[]) => void;
-  toggle: (id: number, shift: boolean, visibleIds: number[]) => void;
+  highlight: (id: number, mode: "single" | "range" | "add", visibleIds: number[]) => void;
+  highlightAll: (ids: number[]) => void;
+  clearHighlight: () => void;
+  /** Toggle a checkbox; on a highlighted tile the whole visible highlighted group follows. */
+  toggleCheck: (id: number, visibleIds: number[]) => void;
+  /** Space: toggle the highlighted group, taking the direction from the last-clicked tile. */
+  toggleHighlighted: (visibleIds: number[]) => void;
   selectAll: (ids: number[]) => void;
   selectNone: () => void;
   setFilter: (f: Filter) => void;
@@ -125,6 +135,7 @@ export const useStore = create<State>((set, get) => ({
   gen: 0,
   items: [],
   selected: new Set(),
+  highlighted: new Set(),
   touched: new Set(),
   anchor: null,
   filter: "all",
@@ -156,6 +167,7 @@ export const useStore = create<State>((set, get) => ({
       scanError: null,
       items: [],
       selected: new Set(),
+      highlighted: new Set(),
       touched: new Set(),
       anchor: null,
       outcomes: new Map(),
@@ -190,26 +202,57 @@ export const useStore = create<State>((set, get) => ({
     set({ items, selected: autoSelect(updates, s.selected, s.touched, s.settings) });
   },
 
-  toggle: (id, shift, visibleIds) => {
+  highlight: (id, mode, visibleIds) => {
     const s = get();
-    const dup = s.settings;
+    if (mode === "range" && s.anchor !== null) {
+      const a = visibleIds.indexOf(s.anchor);
+      const b = visibleIds.indexOf(id);
+      if (a >= 0 && b >= 0) {
+        // The anchor stays put, so further Shift-clicks re-span from it.
+        set({ highlighted: new Set(visibleIds.slice(Math.min(a, b), Math.max(a, b) + 1)) });
+        return;
+      }
+    }
+    if (mode === "add") {
+      const highlighted = new Set(s.highlighted);
+      if (highlighted.has(id)) highlighted.delete(id);
+      else highlighted.add(id);
+      set({ highlighted, anchor: id });
+      return;
+    }
+    set({ highlighted: new Set([id]), anchor: id });
+  },
+
+  highlightAll: (ids) => set({ highlighted: new Set(ids) }),
+
+  clearHighlight: () => set({ highlighted: new Set() }),
+
+  toggleCheck: (id, visibleIds) => {
+    const s = get();
     const selected = new Set(s.selected);
     const touched = new Set(s.touched);
     const on = !selected.has(id);
-    let ids = [id];
-    if (shift && s.anchor !== null) {
-      const a = visibleIds.indexOf(s.anchor);
-      const b = visibleIds.indexOf(id);
-      if (a >= 0 && b >= 0) ids = visibleIds.slice(Math.min(a, b), Math.max(a, b) + 1);
-    }
+    // Only highlighted tiles that are on screen; a filter may hide some.
+    const ids = s.highlighted.has(id) ? visibleIds.filter((i) => s.highlighted.has(i)) : [id];
     for (const i of ids) {
       const it = s.items[i];
-      if (!it || !selectable(it, dup)) continue;
+      if (!it || !selectable(it, s.settings)) continue;
       touched.add(i);
       if (on) selected.add(i);
       else selected.delete(i);
     }
-    set({ selected, touched, anchor: id });
+    set({ selected, touched });
+  },
+
+  toggleHighlighted: (visibleIds) => {
+    const s = get();
+    const group = visibleIds.filter((i) => s.highlighted.has(i));
+    if (group.length === 0) return;
+    // Lead with the last-clicked tile if it is in the group and can be checked.
+    const lead =
+      [s.anchor, ...group].find((i) => i !== null && group.includes(i) && s.items[i] && selectable(s.items[i], s.settings)) ??
+      null;
+    if (lead !== null) get().toggleCheck(lead, visibleIds);
   },
 
   selectAll: (ids) => {

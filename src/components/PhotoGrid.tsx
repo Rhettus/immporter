@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowDown, ArrowUp, ChevronRight, Eye, EyeOff, Images, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckSquare, ChevronRight, Eye, EyeOff, Images, Loader2, Square } from "lucide-react";
 import { api, formatBytes, ItemView, SortBy, Volume } from "../api";
 import { Filter, useStore } from "../store";
 import PhotoTile from "./PhotoTile";
@@ -22,6 +22,10 @@ export default function PhotoGrid() {
   const updateSettings = useStore((s) => s.updateSettings);
   const selectAll = useStore((s) => s.selectAll);
   const selectNone = useStore((s) => s.selectNone);
+  const highlighted = useStore((s) => s.highlighted);
+  const highlightAll = useStore((s) => s.highlightAll);
+  const clearHighlight = useStore((s) => s.clearHighlight);
+  const toggleHighlighted = useStore((s) => s.toggleHighlighted);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
@@ -96,21 +100,31 @@ export default function PhotoGrid() {
     return () => clearTimeout(t);
   }, [range?.startIndex, range?.endIndex, cols, gen, visible]);
 
-  // ⌘A / ⌘D (Ctrl on Windows/Linux)
+  // ⌘A / ⌘D (Ctrl on Windows/Linux) highlight all / none; Space toggles the
+  // highlighted group's checks; Esc clears the highlight.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || (e.target as HTMLElement)?.tagName === "INPUT") return;
-      if (e.key === "a") {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key === "a") {
+          e.preventDefault();
+          highlightAll(visibleIds);
+        } else if (e.key === "d") {
+          e.preventDefault();
+          clearHighlight();
+        }
+      } else if (e.key === " ") {
+        // Also stops Space from scrolling the grid or pressing a focused button.
         e.preventDefault();
-        selectAll(visibleIds);
-      } else if (e.key === "d") {
-        e.preventDefault();
-        selectNone();
+        toggleHighlighted(visibleIds);
+      } else if (e.key === "Escape") {
+        clearHighlight();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [visibleIds, selectAll, selectNone]);
+  }, [visibleIds, highlightAll, clearHighlight, toggleHighlighted]);
 
   const FilterBtn = ({ value, label }: { value: Filter; label: string }) => (
     <button
@@ -169,14 +183,30 @@ export default function PhotoGrid() {
             {sortDesc ? <ArrowDown size={14} /> : <ArrowUp size={14} />}
           </button>
         </div>
-        <span className="text-text-secondary">
-          {selected.size} selected · {formatBytes(selectedBytes)}
+        {highlighted.size > 1 && (
+          <span
+            className="rounded-full border border-[var(--app-highlight-ring)] bg-[var(--app-highlight)] px-2 py-0.5 text-[12px] whitespace-nowrap"
+            title="A checkbox click (or Space) applies to all highlighted photos. Esc clears."
+          >
+            {highlighted.size} highlighted
+          </span>
+        )}
+        <span className="whitespace-nowrap text-text-secondary">
+          {selected.size} checked · {formatBytes(selectedBytes)}
         </span>
-        <button className="text-text-secondary hover:text-text-primary" onClick={() => selectAll(visibleIds)}>
-          All
+        <button
+          className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border-color bg-surface px-2 py-1 text-[12px] hover:bg-card-active"
+          onClick={() => selectAll(visibleIds)}
+          title="Check every photo shown"
+        >
+          <CheckSquare size={14} /> Check all
         </button>
-        <button className="text-text-secondary hover:text-text-primary" onClick={selectNone}>
-          None
+        <button
+          className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border-color bg-surface px-2 py-1 text-[12px] hover:bg-card-active"
+          onClick={selectNone}
+          title="Uncheck every photo"
+        >
+          <Square size={14} /> Uncheck all
         </button>
         <input
           type="range"
@@ -190,7 +220,15 @@ export default function PhotoGrid() {
       </header>
 
       {source && <Breadcrumb source={source} volumes={volumes} count={visible.length} />}
-      <div ref={scrollRef} className="relative flex-1 overflow-y-auto">
+      <div
+        ref={scrollRef}
+        className="relative flex-1 overflow-y-auto"
+        // A click on empty grid space clears the highlight.
+        onClick={(e) => {
+          const t = e.target as HTMLElement;
+          if (!t.closest("[data-tile]")) clearHighlight();
+        }}
+      >
         {!source && (
           <Empty icon={<Images size={40} />} text="Select a card or folder on the left to see its photos." />
         )}

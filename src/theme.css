@@ -15,6 +15,9 @@
   --app-success: rgb(74, 222, 128);
   --app-warning: rgb(251, 191, 36);
   --app-danger: rgb(248, 113, 113);
+  /* Highlighted tiles (the group a checkbox click acts on). */
+  --app-highlight: rgb(64, 70, 82);
+  --app-highlight-ring: rgb(135, 145, 160);
   color-scheme: dark;
 }
 

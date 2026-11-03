@@ -36,18 +36,20 @@ It is built with [Tauri 2](https://tauri.app), Rust and React. Its look follows 
 
 1. **Pick a source** in the left pane:
    - **Click a card** (cards with a `DCIM` folder are listed first) to import everything under its `DCIM` folder.
-   - **Click the ▸ arrow** to browse the card's folders, then click a folder to import just that folder. Each folder shows how many photos it holds directly.
+   - **Click a folder** in the card's tree to import just that folder. A card's tree opens expanded down to its camera folders (e.g. `DCIM › 100OMSYS`); the ▸ arrows open or close folders. Each folder shows how many photos it holds directly.
    - **Choose folder…** imports from any folder on your computer instead.
    - **Include subfolders** (off by default) also scans the folders inside a picked folder. Picking a whole card always includes everything.
    - **Skip _Rejected folders** (on by default) leaves out folders named `_Rejected`. Picking `_Rejected` itself still shows its photos.
    - **Include videos** (on by default) shows and imports video clips.
 
-   **Culling with FastRawViewer first?** It moves your picks into `_Selected` and your culls into `_Rejected` on the card. Expand the card down to `DCIM › 100OMSYS › _Selected` and click it to import only your picks. A breadcrumb above the grid shows which folder you're looking at.
+   **Culling with FastRawViewer first?** It moves your picks into `_Selected` and your culls into `_Rejected` on the card. Click `DCIM › 100OMSYS › _Selected` in the card's tree to import only your picks. A breadcrumb above the grid shows which folder you're looking at.
 2. **Pick a destination** in the right pane: choose your photo library root (e.g. `~/Pictures`). The app indexes it in the background. The status line shows how many photos it knows about, and **Rebuild** forces a full re-scan and re-hash.
 3. **Review the grid.**
-   - New photos are pre-selected.
-   - Click a tile to toggle it, and Shift-click to select a range.
-   - ⌘A / ⌘D (Ctrl on Windows/Linux) select all or none.
+   - A **checked** photo (white box and outline) will be imported. New photos start checked.
+   - Click a photo's **checkbox** to check or uncheck it. **Check all** / **Uncheck all** in the toolbar change every photo shown.
+   - Clicking the photo itself only **highlights** it (a lighter cell). Shift-click highlights a range and ⌘-click (Ctrl on Windows/Linux) adds or removes one photo.
+   - Clicking the checkbox of a highlighted photo applies to the **whole highlighted group**: if that photo was checked, they are all unchecked, and the other way round. **Space** does the same from the keyboard.
+   - ⌘A / ⌘D highlight all photos or none; **Esc** or a click on empty space also clears the highlight. Duplicates in a highlighted group are left alone.
    - The filter at the top switches between All, New and Duplicates. **Hide duplicates** (the eye button) removes photos already in your library from the All view. The slider changes the tile size.
    - **Sort** by Capture time (the default), File name or Folder; ↑/↓ reverses the order. Until a photo's EXIF date has been read, its file time stands in, so the order rarely shifts.
 4. **Set the folder structure and file naming** (see [Templates](#templates)). The **Example** box shows exactly where the first selected photo will go.
