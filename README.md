@@ -250,7 +250,8 @@ These are the behaviours the importer guarantees, and why. Change them deliberat
 ## Building
 
 Requirements:
-- [Rust](https://rustup.rs) (stable);
+- [Rust](https://rustup.rs) (stable, 1.89 or newer; the importer bundles SQLite
+  3.54.1 through rusqlite 0.41.1 for the local catalog);
 - Node.js 20+;
 - the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS (on macOS, the Xcode command-line tools).
 
