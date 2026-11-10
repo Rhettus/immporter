@@ -46,61 +46,83 @@ pub fn origin_of(url: &str) -> Option<String> {
     Some(u.origin().ascii_serialization())
 }
 
-/// What the keychain holds: the key and the server it was saved for.
+/// What the keychain holds: the key, the server it was saved for and
+/// whether that server's certificate errors are accepted. A page cannot
+/// change any of the three without supplying the key again.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Stored {
     pub origin: Option<String>,
     pub key: String,
+    #[serde(default)]
+    pub accept_invalid_certs: Option<bool>,
+}
+
+/// The key with the certificate setting stored beside it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Creds {
+    pub key: String,
+    pub accept_invalid_certs: bool,
 }
 
 pub fn parse_stored(raw: &str) -> Option<Stored> {
     let s = if raw.trim_start().starts_with('{') {
         serde_json::from_str::<Stored>(raw).ok()?
     } else {
-        Stored { origin: None, key: raw.to_string() }
+        Stored { origin: None, key: raw.to_string(), accept_invalid_certs: None }
     };
     (!s.key.is_empty()).then_some(s)
 }
 
-/// The key to use for `target`, and the origin to write back when a legacy
-/// key was just bound to the saved URL. A key whose origin differs from the
-/// target's is never returned.
-pub fn resolve(stored: Option<Stored>, saved_url: &str, target: &str) -> (Option<String>, Option<String>) {
+/// The credentials to use for `target`, and the entry to write back when an
+/// older one lacked its origin or certificate flag and got them from the
+/// saved settings. A key whose origin differs from the target's is never
+/// returned.
+pub fn resolve(stored: Option<Stored>, saved_url: &str, saved_accept: bool, target: &str) -> (Option<Creds>, Option<Stored>) {
     let Some(s) = stored else { return (None, None) };
     let Some(want) = origin_of(target) else { return (None, None) };
-    let (bound, migrated) = match s.origin {
-        Some(o) => (Some(o), None),
-        None => {
-            let o = origin_of(saved_url);
-            (o.clone(), o)
-        }
-    };
-    if bound.as_deref() == Some(want.as_str()) {
-        (Some(s.key), migrated)
-    } else {
-        (None, None)
+    let origin = s.origin.clone().or_else(|| origin_of(saved_url));
+    if origin.as_deref() != Some(want.as_str()) {
+        return (None, None);
     }
+    let accept = s.accept_invalid_certs.unwrap_or(saved_accept);
+    let migrated = (s.origin.is_none() || s.accept_invalid_certs.is_none()).then(|| Stored {
+        origin,
+        key: s.key.clone(),
+        accept_invalid_certs: Some(accept),
+    });
+    (Some(Creds { key: s.key, accept_invalid_certs: accept }), migrated)
 }
 
 /// What saving settings does with the key. `new_key` is what the page sent;
-/// `have_stored` whether a key exists; `stored_ok` whether it is bound to
-/// the new URL.
+/// `have_stored` whether a key exists; `stored_for_url` the stored
+/// certificate flag when the key is bound to the new URL.
 #[derive(Debug, PartialEq)]
 pub enum KeyAction {
     Bind(String),
     Keep,
 }
 
-pub fn plan_save(new_key: Option<&str>, have_stored: bool, stored_ok: bool, new_url: &str) -> Result<KeyAction, String> {
+pub fn plan_save(
+    new_key: Option<&str>,
+    have_stored: bool,
+    stored_for_url: Option<bool>,
+    new_url: &str,
+    new_accept: bool,
+) -> Result<KeyAction, String> {
     if let Some(k) = new_key.map(str::trim).filter(|k| !k.is_empty()) {
         return Ok(KeyAction::Bind(k.to_string()));
     }
-    if have_stored && !new_url.trim().is_empty() && !stored_ok {
-        return Err(KEY_FOR_OTHER_SERVER.into());
+    if have_stored && !new_url.trim().is_empty() {
+        match stored_for_url {
+            None => return Err(KEY_FOR_OTHER_SERVER.into()),
+            Some(a) if a != new_accept => return Err(KEY_FOR_CERT_CHANGE.into()),
+            Some(_) => {}
+        }
     }
     Ok(KeyAction::Keep)
 }
 
+pub const KEY_FOR_CERT_CHANGE: &str = "Enter the API key again to change the certificate setting";
 pub const KEY_FOR_OTHER_SERVER: &str = "Enter the API key for this server. The saved key belongs to a different server.";
 
 // ---- API key in the OS keychain --------------------------------------------
@@ -134,28 +156,26 @@ pub mod keychain {
         read().is_some()
     }
 
-    /// The stored key, only if it belongs to `target`'s origin. `saved_url`
-    /// is the URL in the saved settings: a key stored without an origin is
-    /// bound to it here, once, so existing installs keep working.
-    pub fn get_for(saved_url: &str, target: &str) -> Option<String> {
-        let (key, migrated) = resolve(read(), saved_url, target);
-        if let Some(origin) = migrated {
-            if let Some(k) = &key {
-                let _ = set(&origin, k);
-            }
+    /// The stored credentials, only if the key belongs to `target`'s origin.
+    /// An entry missing its origin or certificate flag gets them from the
+    /// saved settings here, once, so existing installs keep working.
+    pub fn get_for(saved: &ImmichSettings, target: &str) -> Option<Creds> {
+        let (creds, migrated) = resolve(read(), &saved.url, saved.accept_invalid_certs, target);
+        if let Some(m) = migrated {
+            let _ = write(&m);
         }
-        key
+        creds
     }
 
-    /// Store `key`, usable only for the server at `url`.
-    pub fn set_for_url(url: &str, key: &str) -> Result<(), String> {
+    /// Store `key`, usable only for the server at `url` with this certificate
+    /// setting.
+    pub fn set_for_url(url: &str, key: &str, accept_invalid_certs: bool) -> Result<(), String> {
         let origin = origin_of(url).ok_or("Enter a valid server URL")?;
-        set(&origin, key)
+        write(&Stored { origin: Some(origin), key: key.to_string(), accept_invalid_certs: Some(accept_invalid_certs) })
     }
 
-    fn set(origin: &str, key: &str) -> Result<(), String> {
-        let raw = serde_json::to_string(&Stored { origin: Some(origin.to_string()), key: key.to_string() })
-            .map_err(|e| e.to_string())?;
+    fn write(s: &Stored) -> Result<(), String> {
+        let raw = serde_json::to_string(s).map_err(|e| e.to_string())?;
         entry()?.set_password(&raw).map_err(|e| e.to_string())
     }
 
@@ -696,47 +716,59 @@ mod tests {
     }
 
     fn bound(origin: &str) -> Option<Stored> {
-        Some(Stored { origin: Some(origin.into()), key: "secret".into() })
+        Some(Stored { origin: Some(origin.into()), key: "secret".into(), accept_invalid_certs: Some(false) })
+    }
+
+    fn creds(key: &str, accept: bool) -> Option<Creds> {
+        Some(Creds { key: key.into(), accept_invalid_certs: accept })
     }
 
     #[test]
     fn stored_key_only_for_its_origin() {
         let saved = "https://photos.example.com";
-        let (k, m) = resolve(bound("https://photos.example.com"), saved, "https://Photos.example.com/api");
-        assert_eq!((k.as_deref(), m), (Some("secret"), None));
+        let (k, m) = resolve(bound("https://photos.example.com"), saved, true, "https://Photos.example.com/api");
+        // the stored flag wins over the saved settings' value
+        assert_eq!((k, m), (creds("secret", false), None));
         for other in ["https://evil.example", "http://photos.example.com", "https://photos.example.com:8443", "junk"] {
-            assert_eq!(resolve(bound("https://photos.example.com"), saved, other), (None, None), "{other}");
+            assert_eq!(resolve(bound("https://photos.example.com"), saved, false, other), (None, None), "{other}");
         }
     }
 
     #[test]
-    fn legacy_key_binds_to_saved_url() {
+    fn legacy_key_binds_to_saved_url_and_flag() {
         let legacy = parse_stored("plainkey");
-        assert_eq!(legacy, Some(Stored { origin: None, key: "plainkey".into() }));
+        assert_eq!(legacy, Some(Stored { origin: None, key: "plainkey".into(), accept_invalid_certs: None }));
         let saved = "https://photos.example.com/";
-        // another target never gets it, and nothing is bound by asking
-        assert_eq!(resolve(legacy.clone(), saved, "https://evil.example"), (None, None));
-        let (k, m) = resolve(legacy.clone(), saved, "https://photos.example.com");
-        assert_eq!((k.as_deref(), m.as_deref()), (Some("plainkey"), Some("https://photos.example.com")));
+        assert_eq!(resolve(legacy.clone(), saved, false, "https://evil.example"), (None, None));
+        let (k, m) = resolve(legacy.clone(), saved, true, "https://photos.example.com");
+        assert_eq!(k, creds("plainkey", true));
+        let m = m.unwrap();
+        assert_eq!((m.origin.as_deref(), m.accept_invalid_certs), (Some("https://photos.example.com"), Some(true)));
         // no saved URL: nothing to bind to
-        assert_eq!(resolve(legacy, "", "https://photos.example.com"), (None, None));
+        assert_eq!(resolve(legacy, "", false, "https://photos.example.com"), (None, None));
+        // an entry with an origin but no flag takes the saved flag
         let json = parse_stored(r#"{"origin":"https://a","key":"k"}"#).unwrap();
-        assert_eq!(json.origin.as_deref(), Some("https://a"));
+        let (k, m) = resolve(Some(json), "https://a", true, "https://a");
+        assert_eq!(k, creds("k", true));
+        assert_eq!(m.unwrap().accept_invalid_certs, Some(true));
         assert!(parse_stored("").is_none());
     }
 
     #[test]
-    fn saving_a_new_origin_needs_a_key() {
-        // changed origin, key not valid for it: refused
-        assert_eq!(plan_save(None, true, false, "https://evil.example"), Err(KEY_FOR_OTHER_SERVER.into()));
-        assert_eq!(plan_save(Some("  "), true, false, "https://evil.example"), Err(KEY_FOR_OTHER_SERVER.into()));
-        // a new key binds
-        assert_eq!(plan_save(Some(" new "), true, false, "https://b"), Ok(KeyAction::Bind("new".into())));
-        // same origin keeps the key
-        assert_eq!(plan_save(None, true, true, "https://a"), Ok(KeyAction::Keep));
+    fn saving_a_new_origin_or_cert_setting_needs_a_key() {
+        let e = "https://evil.example";
+        assert_eq!(plan_save(None, true, None, e, false), Err(KEY_FOR_OTHER_SERVER.into()));
+        assert_eq!(plan_save(Some("  "), true, None, e, false), Err(KEY_FOR_OTHER_SERVER.into()));
+        assert_eq!(plan_save(Some(" new "), true, None, "https://b", true), Ok(KeyAction::Bind("new".into())));
+        assert_eq!(plan_save(None, true, Some(false), "https://a", false), Ok(KeyAction::Keep));
+        // toggling the certificate setting without the key is refused, both ways
+        assert_eq!(plan_save(None, true, Some(false), "https://a", true), Err(KEY_FOR_CERT_CHANGE.into()));
+        assert_eq!(plan_save(None, true, Some(true), "https://a", false), Err(KEY_FOR_CERT_CHANGE.into()));
+        // with the key it binds
+        assert_eq!(plan_save(Some("k"), true, Some(false), "https://a", true), Ok(KeyAction::Bind("k".into())));
         // nothing stored, or no URL: nothing to protect
-        assert_eq!(plan_save(None, false, false, "https://b"), Ok(KeyAction::Keep));
-        assert_eq!(plan_save(None, true, false, ""), Ok(KeyAction::Keep));
+        assert_eq!(plan_save(None, false, None, "https://b", true), Ok(KeyAction::Keep));
+        assert_eq!(plan_save(None, true, None, "", false), Ok(KeyAction::Keep));
     }
 
     #[test]
@@ -759,8 +791,8 @@ mod tests {
         let mut server = mockito::Server::new();
         let m = server.mock("GET", "/api/server/ping").match_header("x-api-key", "secret").with_status(500).create();
         let url = server.url();
-        let (k, _) = resolve(bound(&origin_of(&url).unwrap()), &url, &url);
-        let _ = Client::new(&url, &k.unwrap(), false).unwrap().test();
+        let (k, _) = resolve(bound(&origin_of(&url).unwrap()), &url, false, &url);
+        let _ = Client::new(&url, &k.unwrap().key, false).unwrap().test();
         m.assert();
     }
 }

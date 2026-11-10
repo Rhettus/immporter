@@ -15,6 +15,7 @@ export default function SettingsDialog() {
   const [form, setForm] = useState<ImmichSettings>(EMPTY);
   const [hasKey, setHasKey] = useState(false);
   const [savedUrl, setSavedUrl] = useState("");
+  const [savedCerts, setSavedCerts] = useState(false);
   const [permission, setPermission] = useState("asset.read");
   const [apiKey, setApiKey] = useState("");
   const [replacingKey, setReplacingKey] = useState(false);
@@ -33,6 +34,7 @@ export default function SettingsDialog() {
     api.getImmichSettings().then(({ hasKey, requiredPermission, ...s }) => {
       setForm(s);
       setSavedUrl(s.url);
+      setSavedCerts(s.acceptInvalidCerts);
       setHasKey(hasKey);
       setPermission(requiredPermission);
     });
@@ -50,7 +52,9 @@ export default function SettingsDialog() {
 
   const update = (patch: Partial<ImmichSettings>) => setForm((f) => ({ ...f, ...patch }));
   const newServer = hasKey && serverChanged(savedUrl, form.url);
-  const keyInput = !hasKey || replacingKey || newServer;
+  const newCerts = hasKey && form.acceptInvalidCerts !== savedCerts;
+  const keyRequired = newServer || newCerts;
+  const keyInput = !hasKey || replacingKey || keyRequired;
   const keyToSend = keyInput && apiKey.trim() ? apiKey.trim() : null;
   const prefix = form.pathPrefix.trim().replace(/\/+$/, "");
   const expectedPath = prefix ? `${prefix}/${exampleRel}` : `…/${exampleRel}`;
@@ -142,9 +146,11 @@ export default function SettingsDialog() {
                   </button>
                 </div>
               )}
-              {newServer && (
+              {newServer ? (
                 <p className="text-[11px] text-warning">The saved key is for another server. Enter the key for this one.</p>
-              )}
+              ) : newCerts ? (
+                <p className="text-[11px] text-warning">Enter the API key again to change the certificate setting.</p>
+              ) : null}
               <p className="text-[11px] leading-relaxed text-text-secondary">
                 In Immich, open <b>Account Settings → API Keys</b> and create a key with only the{" "}
                 <code className="rounded bg-bg-primary px-1 text-text-primary">{permission}</code> permission. The
@@ -162,7 +168,7 @@ export default function SettingsDialog() {
             <div className="flex items-start gap-3">
               <button
                 onClick={runTest}
-                disabled={testing || !form.url || (newServer && !keyToSend)}
+                disabled={testing || !form.url || (keyRequired && !keyToSend)}
                 className="shrink-0 whitespace-nowrap rounded-md bg-surface px-3 py-1.5 hover:bg-card-active disabled:opacity-40"
               >
                 {testing ? (

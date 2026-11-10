@@ -302,13 +302,14 @@ fn load_immich_settings(catalog: &Catalog) -> ImmichSettings {
     catalog.get_setting(IMMICH_SETTINGS_KEY).and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
 
-fn immich_ctx(settings: &ImmichSettings, key: Option<String>) -> Option<Arc<ImmichCtx>> {
-    let key = key?;
+fn immich_ctx(settings: &ImmichSettings, creds: Option<immich::Creds>) -> Option<Arc<ImmichCtx>> {
+    let creds = creds?;
     if !settings.enabled || settings.url.trim().is_empty() {
         return None;
     }
-    let client = immich::Client::new(&settings.url, &key, settings.accept_invalid_certs).ok()?;
-    Some(Arc::new(ImmichCtx { client, settings: settings.clone() }))
+    // the certificate setting comes from the keychain with the key, not the page
+    let client = immich::Client::new(&settings.url, &creds.key, creds.accept_invalid_certs).ok()?;
+    Some(Arc::new(ImmichCtx { client, settings: ImmichSettings { accept_invalid_certs: creds.accept_invalid_certs, ..settings.clone() } }))
 }
 
 /// The Immich server and key as saved, for an app embedding the importer
@@ -328,11 +329,8 @@ pub fn immich_connection(app: &AppHandle) -> Option<ImmichConnection> {
     if settings.url.trim().is_empty() {
         return None;
     }
-    Some(ImmichConnection {
-        url: settings.url.clone(),
-        api_key: immich::keychain::get_for(&settings.url, &settings.url)?,
-        accept_invalid_certs: settings.accept_invalid_certs,
-    })
+    let creds = immich::keychain::get_for(&settings, &settings.url)?;
+    Some(ImmichConnection { url: settings.url, api_key: creds.key, accept_invalid_certs: creds.accept_invalid_certs })
 }
 
 #[derive(Serialize)]
@@ -346,9 +344,14 @@ struct ImmichSettingsView {
 
 #[tauri::command]
 fn get_immich_settings(state: State<'_, AppState>) -> ImmichSettingsView {
-    let settings = load_immich_settings(&state.catalog);
+    let mut settings = load_immich_settings(&state.catalog);
+    let creds = immich::keychain::get_for(&settings, &settings.url);
+    // show the setting that is in force
+    if let Some(c) = &creds {
+        settings.accept_invalid_certs = c.accept_invalid_certs;
+    }
     ImmichSettingsView {
-        has_key: immich::keychain::get_for(&settings.url, &settings.url).is_some(),
+        has_key: creds.is_some(),
         settings,
         required_permission: immich::REQUIRED_PERMISSION,
     }
@@ -360,18 +363,24 @@ fn get_immich_settings(state: State<'_, AppState>) -> ImmichSettingsView {
 /// so the saved key can never be sent to a server it was not saved for.
 #[tauri::command]
 fn save_immich_settings(state: State<'_, AppState>, mut settings: ImmichSettings, api_key: Option<String>) -> Result<(), String> {
-    let saved_url = load_immich_settings(&state.catalog).url;
+    let saved = load_immich_settings(&state.catalog);
     settings.url = immich::normalize_url(&settings.url);
-    let stored_ok = immich::keychain::get_for(&saved_url, &settings.url).is_some();
-    match immich::plan_save(api_key.as_deref(), immich::keychain::exists(), stored_ok, &settings.url)? {
-        immich::KeyAction::Bind(k) => immich::keychain::set_for_url(&settings.url, &k)?,
+    let stored = immich::keychain::get_for(&saved, &settings.url);
+    match immich::plan_save(
+        api_key.as_deref(),
+        immich::keychain::exists(),
+        stored.as_ref().map(|c| c.accept_invalid_certs),
+        &settings.url,
+        settings.accept_invalid_certs,
+    )? {
+        immich::KeyAction::Bind(k) => immich::keychain::set_for_url(&settings.url, &k, settings.accept_invalid_certs)?,
         immich::KeyAction::Keep => {}
     }
     state
         .catalog
         .set_setting(IMMICH_SETTINGS_KEY, &serde_json::to_string(&settings).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
-    let ctx = if settings.enabled { immich_ctx(&settings, immich::keychain::get_for(&settings.url, &settings.url)) } else { None };
+    let ctx = if settings.enabled { immich_ctx(&settings, immich::keychain::get_for(&settings, &settings.url)) } else { None };
     *state.dedupe.immich.write() = ctx;
     reevaluate(&state);
     Ok(())
@@ -388,21 +397,27 @@ fn forget_immich_key(state: State<'_, AppState>) -> Result<(), String> {
 /// Test a connection. Uses `api_key` if given, else the stored key.
 #[tauri::command]
 async fn test_immich(state: State<'_, AppState>, settings: ImmichSettings, api_key: Option<String>) -> Result<immich::TestResult, String> {
-    let saved_url = load_immich_settings(&state.catalog).url;
+    let saved = load_immich_settings(&state.catalog);
     Ok(tauri::async_runtime::spawn_blocking(move || {
-        // the stored key goes only to the server it was saved for
-        let key = api_key.filter(|k| !k.trim().is_empty()).or_else(|| immich::keychain::get_for(&saved_url, &settings.url));
-        let Some(key) = key else {
-            let msg = if immich::keychain::exists() && !settings.url.trim().is_empty() {
-                immich::KEY_FOR_OTHER_SERVER
-            } else {
-                "Enter an API key"
-            };
-            return immich::TestResult { error: Some(msg.into()), ..Default::default() };
+        let error = |m: &str| immich::TestResult { error: Some(m.into()), ..Default::default() };
+        // a key typed now brings its own certificate setting; the stored key
+        // goes only to the server it was saved for, with its stored setting
+        let creds = match api_key.filter(|k| !k.trim().is_empty()) {
+            Some(k) => immich::Creds { key: k, accept_invalid_certs: settings.accept_invalid_certs },
+            None => match immich::keychain::get_for(&saved, &settings.url) {
+                Some(c) if c.accept_invalid_certs != settings.accept_invalid_certs => {
+                    return error(immich::KEY_FOR_CERT_CHANGE);
+                }
+                Some(c) => c,
+                None if immich::keychain::exists() && !settings.url.trim().is_empty() => {
+                    return error(immich::KEY_FOR_OTHER_SERVER);
+                }
+                None => return error("Enter an API key"),
+            },
         };
-        match immich::Client::new(&settings.url, &key, settings.accept_invalid_certs) {
+        match immich::Client::new(&settings.url, &creds.key, creds.accept_invalid_certs) {
             Ok(c) => c.test(),
-            Err(e) => immich::TestResult { error: Some(e), ..Default::default() },
+            Err(e) => error(&e),
         }
     })
     .await
@@ -553,7 +568,7 @@ pub fn init(config: Config) -> TauriPlugin<Wry> {
             }
             let immich_settings = load_immich_settings(&catalog);
             if immich_settings.enabled {
-                *dedupe.immich.write() = immich_ctx(&immich_settings, immich::keychain::get_for(&immich_settings.url, &immich_settings.url));
+                *dedupe.immich.write() = immich_ctx(&immich_settings, immich::keychain::get_for(&immich_settings, &immich_settings.url));
             }
             app.manage(AppState {
                 catalog,
