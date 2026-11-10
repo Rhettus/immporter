@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { Cloud, CloudOff, Database, FolderInput, Loader2, RefreshCw, Settings } from "lucide-react";
 import { api, formatBytes } from "../api";
 import { useStore } from "../store";
@@ -31,6 +30,8 @@ export default function OptionsPanel() {
   const startImport = useStore((s) => s.startImport);
   const importError = useStore((s) => s.importError);
   const openSettings = useStore((s) => s.openSettings);
+  const grantedDests = useStore((s) => s.grantedDests);
+  const refreshGranted = useStore((s) => s.refreshGranted);
   const firstSelected = useMemo(() => (selected.size ? Math.min(...selected) : null), [selected]);
   const [example, setExample] = useState("");
 
@@ -42,14 +43,13 @@ export default function OptionsPanel() {
   }, [settings.folderTpl, settings.nameTpl, firstSelected, items.length]);
 
   const chooseDest = async () => {
-    const dir = await open({ directory: true, title: "Import into", defaultPath: settings.destRoot ?? undefined });
-    if (typeof dir === "string") setDest(dir);
+    const dir = await api.pickDestination(settings.destRoot);
+    if (!dir) return;
+    await refreshGranted();
+    setDest(dir);
   };
 
-  const setDest = (dir: string) => {
-    const recentDests = [dir, ...settings.recentDests.filter((d) => d !== dir)].slice(0, 8);
-    update({ destRoot: dir, recentDests });
-  };
+  const setDest = (dir: string) => update({ destRoot: dir });
 
   const selectedBytes = useMemo(() => {
     let n = 0;
@@ -86,7 +86,7 @@ export default function OptionsPanel() {
               onChange={(e) => (e.target.value === "__browse" ? chooseDest() : setDest(e.target.value))}
             >
               {!settings.destRoot && <option value="">Choose a folder…</option>}
-              {settings.recentDests.map((d) => (
+              {grantedDests.map((d) => (
                 <option key={d} value={d}>
                   {d}
                 </option>

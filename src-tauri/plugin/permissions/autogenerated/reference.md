@@ -7,6 +7,10 @@ Everything the importer's own UI calls.
 - `allow-dev-autoload-source`
 - `allow-list-volumes`
 - `allow-list-folders`
+- `allow-pick-source`
+- `allow-pick-destination`
+- `allow-list-granted-destinations`
+- `allow-forget-destination`
 - `allow-save-video-thumb`
 - `allow-scan-source`
 - `allow-close-source`
@@ -139,6 +143,32 @@ Denies the example_path command without any pre-configured scope.
 <tr>
 <td>
 
+`immporter:allow-forget-destination`
+
+</td>
+<td>
+
+Enables the forget_destination command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`immporter:deny-forget-destination`
+
+</td>
+<td>
+
+Denies the forget_destination command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `immporter:allow-forget-immich-key`
 
 </td>
@@ -243,6 +273,32 @@ Denies the list_folders command without any pre-configured scope.
 <tr>
 <td>
 
+`immporter:allow-list-granted-destinations`
+
+</td>
+<td>
+
+Enables the list_granted_destinations command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`immporter:deny-list-granted-destinations`
+
+</td>
+<td>
+
+Denies the list_granted_destinations command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `immporter:allow-list-volumes`
 
 </td>
@@ -262,6 +318,58 @@ Enables the list_volumes command without any pre-configured scope.
 <td>
 
 Denies the list_volumes command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`immporter:allow-pick-destination`
+
+</td>
+<td>
+
+Enables the pick_destination command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`immporter:deny-pick-destination`
+
+</td>
+<td>
+
+Denies the pick_destination command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`immporter:allow-pick-source`
+
+</td>
+<td>
+
+Enables the pick_source command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`immporter:deny-pick-source`
+
+</td>
+<td>
+
+Denies the pick_source command without any pre-configured scope.
 
 </td>
 </tr>

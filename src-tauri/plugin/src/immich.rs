@@ -36,6 +36,95 @@ pub fn normalize_url(url: &str) -> String {
     u.trim_end_matches('/').to_string()
 }
 
+/// `https://Host:443/api` -> `https://host`: scheme, lowercase host and the
+/// port unless it is the scheme's default. `None` for anything but http(s).
+pub fn origin_of(url: &str) -> Option<String> {
+    let u = reqwest::Url::parse(normalize_url(url).as_str()).ok()?;
+    if !matches!(u.scheme(), "http" | "https") || u.host_str().is_none() {
+        return None;
+    }
+    Some(u.origin().ascii_serialization())
+}
+
+/// What the keychain holds: the key, the server it was saved for and
+/// whether that server's certificate errors are accepted. A page cannot
+/// change any of the three without supplying the key again.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Stored {
+    pub origin: Option<String>,
+    pub key: String,
+    #[serde(default)]
+    pub accept_invalid_certs: Option<bool>,
+}
+
+/// The key with the certificate setting stored beside it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Creds {
+    pub key: String,
+    pub accept_invalid_certs: bool,
+}
+
+pub fn parse_stored(raw: &str) -> Option<Stored> {
+    let s = if raw.trim_start().starts_with('{') {
+        serde_json::from_str::<Stored>(raw).ok()?
+    } else {
+        Stored { origin: None, key: raw.to_string(), accept_invalid_certs: None }
+    };
+    (!s.key.is_empty()).then_some(s)
+}
+
+/// The credentials to use for `target`, and the entry to write back when an
+/// older one lacked its origin or certificate flag and got them from the
+/// saved settings. A key whose origin differs from the target's is never
+/// returned.
+pub fn resolve(stored: Option<Stored>, saved_url: &str, saved_accept: bool, target: &str) -> (Option<Creds>, Option<Stored>) {
+    let Some(s) = stored else { return (None, None) };
+    let Some(want) = origin_of(target) else { return (None, None) };
+    let origin = s.origin.clone().or_else(|| origin_of(saved_url));
+    if origin.as_deref() != Some(want.as_str()) {
+        return (None, None);
+    }
+    let accept = s.accept_invalid_certs.unwrap_or(saved_accept);
+    let migrated = (s.origin.is_none() || s.accept_invalid_certs.is_none()).then(|| Stored {
+        origin,
+        key: s.key.clone(),
+        accept_invalid_certs: Some(accept),
+    });
+    (Some(Creds { key: s.key, accept_invalid_certs: accept }), migrated)
+}
+
+/// What saving settings does with the key. `new_key` is what the page sent;
+/// `have_stored` whether a key exists; `stored_for_url` the stored
+/// certificate flag when the key is bound to the new URL.
+#[derive(Debug, PartialEq)]
+pub enum KeyAction {
+    Bind(String),
+    Keep,
+}
+
+pub fn plan_save(
+    new_key: Option<&str>,
+    have_stored: bool,
+    stored_for_url: Option<bool>,
+    new_url: &str,
+    new_accept: bool,
+) -> Result<KeyAction, String> {
+    if let Some(k) = new_key.map(str::trim).filter(|k| !k.is_empty()) {
+        return Ok(KeyAction::Bind(k.to_string()));
+    }
+    if have_stored && !new_url.trim().is_empty() {
+        match stored_for_url {
+            None => return Err(KEY_FOR_OTHER_SERVER.into()),
+            Some(a) if a != new_accept => return Err(KEY_FOR_CERT_CHANGE.into()),
+            Some(_) => {}
+        }
+    }
+    Ok(KeyAction::Keep)
+}
+
+pub const KEY_FOR_CERT_CHANGE: &str = "Enter the API key again to change the certificate setting";
+pub const KEY_FOR_OTHER_SERVER: &str = "Enter the API key for this server. The saved key belongs to a different server.";
+
 // ---- API key in the OS keychain --------------------------------------------
 
 pub mod keychain {
@@ -56,23 +145,49 @@ pub mod keychain {
         keyring::Entry::new(service, KEYCHAIN_ACCOUNT).map_err(|e| e.to_string())
     }
 
-    pub fn get() -> Option<String> {
-        entry().ok()?.get_password().ok().filter(|k| !k.is_empty())
+    /// The stored entry. A key saved by an older version is the bare key
+    /// (no `{`; Immich keys never contain one) and has no origin yet.
+    fn read() -> Option<Stored> {
+        parse_stored(&entry().ok()?.get_password().ok()?)
     }
 
-    pub fn set(key: &str) -> Result<(), String> {
-        entry()?.set_password(key).map_err(|e| e.to_string())
+    /// Whether any key is stored, for any server.
+    pub fn exists() -> bool {
+        read().is_some()
+    }
+
+    /// The stored credentials, only if the key belongs to `target`'s origin.
+    /// An entry missing its origin or certificate flag gets them from the
+    /// saved settings here, once, so existing installs keep working.
+    pub fn get_for(saved: &ImmichSettings, target: &str) -> Option<Creds> {
+        let (creds, migrated) = resolve(read(), &saved.url, saved.accept_invalid_certs, target);
+        if let Some(m) = migrated {
+            let _ = write(&m);
+        }
+        creds
+    }
+
+    /// Store `key`, usable only for the server at `url` with this certificate
+    /// setting.
+    pub fn set_for_url(url: &str, key: &str, accept_invalid_certs: bool) -> Result<(), String> {
+        let origin = origin_of(url).ok_or("Enter a valid server URL")?;
+        write(&Stored { origin: Some(origin), key: key.to_string(), accept_invalid_certs: Some(accept_invalid_certs) })
+    }
+
+    fn write(s: &Stored) -> Result<(), String> {
+        let raw = serde_json::to_string(s).map_err(|e| e.to_string())?;
+        entry()?.set_password(&raw).map_err(|e| e.to_string())
     }
 
     /// The key kept under another service (an app's identifier before a
     /// rename) moves under this one, unless this one has its own.
     pub fn migrate_from(old: &str) {
-        if get().is_some() {
+        if exists() {
             return;
         }
         let Ok(e) = keyring::Entry::new(old, KEYCHAIN_ACCOUNT) else { return };
-        if let Ok(key) = e.get_password() {
-            if !key.is_empty() && set(&key).is_ok() {
+        if let Ok(raw) = e.get_password() {
+            if parse_stored(&raw).is_some() && entry().and_then(|n| n.set_password(&raw).map_err(|e| e.to_string())).is_ok() {
                 let _ = e.delete_credential();
             }
         }
@@ -154,6 +269,9 @@ fn check_status(resp: reqwest::blocking::Response) -> Result<reqwest::blocking::
         401 => Err("Immich rejected the API key".into()),
         403 => Err(format!("The API key is missing the {REQUIRED_PERMISSION} permission")),
         404 => Err("Not an Immich server (API not found at this URL)".into()),
+        301 | 302 | 303 | 307 | 308 => {
+            Err("The server redirected the request. Use its final URL (for example https instead of http)".into())
+        }
         code => Err(format!("Immich returned HTTP {code}")),
     }
 }
@@ -171,6 +289,8 @@ impl Client {
         let http = reqwest::blocking::Client::builder()
             .default_headers(headers)
             .timeout(Duration::from_secs(15))
+            // a redirect would carry the key to wherever it points
+            .redirect(reqwest::redirect::Policy::none())
             .tls_danger_accept_invalid_certs(accept_invalid_certs)
             .build()
             .map_err(|e| e.to_string())?;
@@ -584,5 +704,95 @@ mod tests {
         s2.mock("GET", "/api/server/ping").with_status(401).create();
         let r = Client::new(&s2.url(), "nope", false).unwrap().test();
         assert!(r.error.unwrap().contains("rejected"));
+    }
+
+    #[test]
+    fn origins_are_normalized() {
+        assert_eq!(origin_of("HTTPS://Photos.Example.com:443/api/").as_deref(), Some("https://photos.example.com"));
+        assert_eq!(origin_of("http://nas:2283").as_deref(), Some("http://nas:2283"));
+        assert_eq!(origin_of("http://nas:80").as_deref(), Some("http://nas"));
+        assert_eq!(origin_of("ftp://x"), None);
+        assert_eq!(origin_of(""), None);
+    }
+
+    fn bound(origin: &str) -> Option<Stored> {
+        Some(Stored { origin: Some(origin.into()), key: "secret".into(), accept_invalid_certs: Some(false) })
+    }
+
+    fn creds(key: &str, accept: bool) -> Option<Creds> {
+        Some(Creds { key: key.into(), accept_invalid_certs: accept })
+    }
+
+    #[test]
+    fn stored_key_only_for_its_origin() {
+        let saved = "https://photos.example.com";
+        let (k, m) = resolve(bound("https://photos.example.com"), saved, true, "https://Photos.example.com/api");
+        // the stored flag wins over the saved settings' value
+        assert_eq!((k, m), (creds("secret", false), None));
+        for other in ["https://evil.example", "http://photos.example.com", "https://photos.example.com:8443", "junk"] {
+            assert_eq!(resolve(bound("https://photos.example.com"), saved, false, other), (None, None), "{other}");
+        }
+    }
+
+    #[test]
+    fn legacy_key_binds_to_saved_url_and_flag() {
+        let legacy = parse_stored("plainkey");
+        assert_eq!(legacy, Some(Stored { origin: None, key: "plainkey".into(), accept_invalid_certs: None }));
+        let saved = "https://photos.example.com/";
+        assert_eq!(resolve(legacy.clone(), saved, false, "https://evil.example"), (None, None));
+        let (k, m) = resolve(legacy.clone(), saved, true, "https://photos.example.com");
+        assert_eq!(k, creds("plainkey", true));
+        let m = m.unwrap();
+        assert_eq!((m.origin.as_deref(), m.accept_invalid_certs), (Some("https://photos.example.com"), Some(true)));
+        // no saved URL: nothing to bind to
+        assert_eq!(resolve(legacy, "", false, "https://photos.example.com"), (None, None));
+        // an entry with an origin but no flag takes the saved flag
+        let json = parse_stored(r#"{"origin":"https://a","key":"k"}"#).unwrap();
+        let (k, m) = resolve(Some(json), "https://a", true, "https://a");
+        assert_eq!(k, creds("k", true));
+        assert_eq!(m.unwrap().accept_invalid_certs, Some(true));
+        assert!(parse_stored("").is_none());
+    }
+
+    #[test]
+    fn saving_a_new_origin_or_cert_setting_needs_a_key() {
+        let e = "https://evil.example";
+        assert_eq!(plan_save(None, true, None, e, false), Err(KEY_FOR_OTHER_SERVER.into()));
+        assert_eq!(plan_save(Some("  "), true, None, e, false), Err(KEY_FOR_OTHER_SERVER.into()));
+        assert_eq!(plan_save(Some(" new "), true, None, "https://b", true), Ok(KeyAction::Bind("new".into())));
+        assert_eq!(plan_save(None, true, Some(false), "https://a", false), Ok(KeyAction::Keep));
+        // toggling the certificate setting without the key is refused, both ways
+        assert_eq!(plan_save(None, true, Some(false), "https://a", true), Err(KEY_FOR_CERT_CHANGE.into()));
+        assert_eq!(plan_save(None, true, Some(true), "https://a", false), Err(KEY_FOR_CERT_CHANGE.into()));
+        // with the key it binds
+        assert_eq!(plan_save(Some("k"), true, Some(false), "https://a", true), Ok(KeyAction::Bind("k".into())));
+        // nothing stored, or no URL: nothing to protect
+        assert_eq!(plan_save(None, false, None, "https://b", true), Ok(KeyAction::Keep));
+        assert_eq!(plan_save(None, true, None, "", false), Ok(KeyAction::Keep));
+    }
+
+    #[test]
+    fn redirects_are_not_followed_and_key_not_forwarded() {
+        let mut target = mockito::Server::new();
+        let leaked = target.mock("GET", "/api/server/ping").match_header("x-api-key", "secret").expect(0).create();
+        let mut origin = mockito::Server::new();
+        origin
+            .mock("GET", "/api/server/ping")
+            .with_status(302)
+            .with_header("location", &format!("{}/api/server/ping", target.url()))
+            .create();
+        let r = Client::new(&origin.url(), "secret", false).unwrap().test();
+        assert!(r.error.unwrap().contains("redirected"));
+        leaked.assert();
+    }
+
+    #[test]
+    fn same_origin_sends_the_key() {
+        let mut server = mockito::Server::new();
+        let m = server.mock("GET", "/api/server/ping").match_header("x-api-key", "secret").with_status(500).create();
+        let url = server.url();
+        let (k, _) = resolve(bound(&origin_of(&url).unwrap()), &url, false, &url);
+        let _ = Client::new(&url, &k.unwrap().key, false).unwrap().test();
+        m.assert();
     }
 }

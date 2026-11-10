@@ -343,6 +343,18 @@
           "markdownDescription": "Denies the example_path command without any pre-configured scope."
         },
         {
+          "description": "Enables the forget_destination command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-forget-destination",
+          "markdownDescription": "Enables the forget_destination command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the forget_destination command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-forget-destination",
+          "markdownDescription": "Denies the forget_destination command without any pre-configured scope."
+        },
+        {
           "description": "Enables the forget_immich_key command without any pre-configured scope.",
           "type": "string",
           "const": "allow-forget-immich-key",
@@ -391,6 +403,18 @@
           "markdownDescription": "Denies the list_folders command without any pre-configured scope."
         },
         {
+          "description": "Enables the list_granted_destinations command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-granted-destinations",
+          "markdownDescription": "Enables the list_granted_destinations command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_granted_destinations command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-granted-destinations",
+          "markdownDescription": "Denies the list_granted_destinations command without any pre-configured scope."
+        },
+        {
           "description": "Enables the list_volumes command without any pre-configured scope.",
           "type": "string",
           "const": "allow-list-volumes",
@@ -401,6 +425,30 @@
           "type": "string",
           "const": "deny-list-volumes",
           "markdownDescription": "Denies the list_volumes command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the pick_destination command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-pick-destination",
+          "markdownDescription": "Enables the pick_destination command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the pick_destination command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-pick-destination",
+          "markdownDescription": "Denies the pick_destination command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the pick_source command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-pick-source",
+          "markdownDescription": "Enables the pick_source command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the pick_source command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-pick-source",
+          "markdownDescription": "Denies the pick_source command without any pre-configured scope."
         },
         {
           "description": "Enables the rebuild_dest_index command without any pre-configured scope.",
@@ -511,10 +559,10 @@
           "markdownDescription": "Denies the test_immich command without any pre-configured scope."
         },
         {
-          "description": "Everything the importer's own UI calls.\n#### This default permission set includes:\n\n- `allow-dev-autoload-source`\n- `allow-list-volumes`\n- `allow-list-folders`\n- `allow-save-video-thumb`\n- `allow-scan-source`\n- `allow-close-source`\n- `allow-set-visible`\n- `allow-get-settings`\n- `allow-save-settings`\n- `allow-set-dedupe-config`\n- `allow-rebuild-dest-index`\n- `allow-example-path`\n- `allow-get-immich-settings`\n- `allow-save-immich-settings`\n- `allow-forget-immich-key`\n- `allow-test-immich`\n- `allow-start-import`\n- `allow-cancel-import`",
+          "description": "Everything the importer's own UI calls.\n#### This default permission set includes:\n\n- `allow-dev-autoload-source`\n- `allow-list-volumes`\n- `allow-list-folders`\n- `allow-pick-source`\n- `allow-pick-destination`\n- `allow-list-granted-destinations`\n- `allow-forget-destination`\n- `allow-save-video-thumb`\n- `allow-scan-source`\n- `allow-close-source`\n- `allow-set-visible`\n- `allow-get-settings`\n- `allow-save-settings`\n- `allow-set-dedupe-config`\n- `allow-rebuild-dest-index`\n- `allow-example-path`\n- `allow-get-immich-settings`\n- `allow-save-immich-settings`\n- `allow-forget-immich-key`\n- `allow-test-immich`\n- `allow-start-import`\n- `allow-cancel-import`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Everything the importer's own UI calls.\n#### This default permission set includes:\n\n- `allow-dev-autoload-source`\n- `allow-list-volumes`\n- `allow-list-folders`\n- `allow-save-video-thumb`\n- `allow-scan-source`\n- `allow-close-source`\n- `allow-set-visible`\n- `allow-get-settings`\n- `allow-save-settings`\n- `allow-set-dedupe-config`\n- `allow-rebuild-dest-index`\n- `allow-example-path`\n- `allow-get-immich-settings`\n- `allow-save-immich-settings`\n- `allow-forget-immich-key`\n- `allow-test-immich`\n- `allow-start-import`\n- `allow-cancel-import`"
+          "markdownDescription": "Everything the importer's own UI calls.\n#### This default permission set includes:\n\n- `allow-dev-autoload-source`\n- `allow-list-volumes`\n- `allow-list-folders`\n- `allow-pick-source`\n- `allow-pick-destination`\n- `allow-list-granted-destinations`\n- `allow-forget-destination`\n- `allow-save-video-thumb`\n- `allow-scan-source`\n- `allow-close-source`\n- `allow-set-visible`\n- `allow-get-settings`\n- `allow-save-settings`\n- `allow-set-dedupe-config`\n- `allow-rebuild-dest-index`\n- `allow-example-path`\n- `allow-get-immich-settings`\n- `allow-save-immich-settings`\n- `allow-forget-immich-key`\n- `allow-test-immich`\n- `allow-start-import`\n- `allow-cancel-import`"
         }
       ]
     }

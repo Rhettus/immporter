@@ -35,6 +35,8 @@ interface State {
   filter: Filter;
   settings: Settings;
   settingsLoaded: boolean;
+  /** Destinations chosen in the destination dialog, most recent first (kept by the backend). */
+  grantedDests: string[];
   destIndex: DestIndexEvent | null;
   importing: boolean;
   progress: ImportProgress | null;
@@ -54,6 +56,7 @@ interface State {
   showImported: (() => void) | null;
 
   setVolumes: (v: Volume[]) => void;
+  refreshGranted: () => Promise<string[]>;
   openSource: (path: string) => Promise<void>;
   applyUpdates: (gen: number, items: ItemView[]) => void;
   highlight: (id: number, mode: "single" | "range" | "add", visibleIds: number[]) => void;
@@ -141,6 +144,7 @@ export const useStore = create<State>((set, get) => ({
   filter: "all",
   settings: defaultSettings,
   settingsLoaded: false,
+  grantedDests: [],
   destIndex: null,
   importing: false,
   progress: null,
@@ -303,7 +307,8 @@ export const useStore = create<State>((set, get) => ({
       api.saveSettings(get().settings);
       if (dedupeChanged) {
         const st = get().settings;
-        api.setDedupeConfig(st.destRoot, st.folderTpl, st.nameTpl);
+        // a destination that was not chosen in the dialog is refused
+        api.setDedupeConfig(st.destRoot, st.folderTpl, st.nameTpl).catch(() => {});
       }
     }, 300);
   },
@@ -311,8 +316,18 @@ export const useStore = create<State>((set, get) => ({
   loadSettings: async () => {
     const saved = await api.getSettings();
     const settings = { ...defaultSettings, ...(saved ?? {}) };
-    set({ settings, settingsLoaded: true });
-    await api.setDedupeConfig(settings.destRoot, settings.folderTpl, settings.nameTpl);
+    delete (settings as { recentDests?: unknown }).recentDests;
+    // the saved destination is only a hint: it stands if the backend granted it
+    const grantedDests = await api.listGrantedDestinations().catch(() => [] as string[]);
+    if (settings.destRoot && !grantedDests.includes(settings.destRoot)) settings.destRoot = null;
+    set({ settings, grantedDests, settingsLoaded: true });
+    await api.setDedupeConfig(settings.destRoot, settings.folderTpl, settings.nameTpl).catch(() => {});
+  },
+
+  refreshGranted: async () => {
+    const grantedDests = await api.listGrantedDestinations().catch(() => [] as string[]);
+    set({ grantedDests });
+    return grantedDests;
   },
 
   setDestIndex: (destIndex) => {

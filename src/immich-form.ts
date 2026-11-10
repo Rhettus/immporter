@@ -30,3 +30,18 @@ export function suggestPrefix(samplePath: string, exampleRel: string): string | 
   if (parts.length <= levels) return null;
   return parts.slice(0, parts.length - levels).join("/") || "/";
 }
+
+function origin(url: string): string | null {
+  try {
+    const u = new URL(url.trim().replace(/\/+$/, "").replace(/\/api$/, ""));
+    return u.protocol === "http:" || u.protocol === "https:" ? u.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether `url` is on a different server than the saved one. The saved API key only works for the server it was saved for. */
+export function serverChanged(savedUrl: string, url: string): boolean {
+  if (!savedUrl.trim() || !url.trim()) return false;
+  return origin(savedUrl) !== origin(url);
+}
