@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { CardSim, ChevronRight, Folder, FolderOpen, HardDrive } from "lucide-react";
 import { api, FolderEntry, formatBytes, Volume } from "../api";
 import { useStore } from "../store";
@@ -15,8 +14,8 @@ export default function VolumeList() {
   const update = useStore((s) => s.updateSettings);
 
   const chooseFolder = async () => {
-    const dir = await open({ directory: true, title: "Import from folder" });
-    if (typeof dir === "string") openSource(dir);
+    const dir = await api.pickSource();
+    if (dir) openSource(dir);
   };
 
   const onAnyVolume = source !== null && volumes.some((v) => source === v.mountPoint || source.startsWith(v.mountPoint + "/"));

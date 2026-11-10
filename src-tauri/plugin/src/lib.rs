@@ -1,6 +1,7 @@
 pub mod catalog;
 pub mod dedupe;
 pub mod dest_index;
+pub mod grants;
 pub mod immich;
 pub mod import;
 pub mod media;
@@ -24,6 +25,7 @@ use tauri::{AppHandle, Emitter, Manager, State, Wry};
 
 use catalog::Catalog;
 use dedupe::{DedupeCfg, Deduper, ImmichCtx};
+use grants::Grants;
 use immich::ImmichSettings;
 use preview::ThumbCache;
 use scan::{ItemView, Session};
@@ -32,6 +34,7 @@ pub struct AppState {
     catalog: Arc<Catalog>,
     thumbs: Arc<ThumbCache>,
     dedupe: Arc<Deduper>,
+    grants: Mutex<Grants>,
     session: Mutex<Option<Arc<Session>>>,
     dest_cancel: Mutex<Arc<AtomicBool>>,
     import_cancel: Mutex<Option<Arc<AtomicBool>>>,
@@ -97,11 +100,12 @@ async fn scan_source(
     if let Some(old) = state.session.lock().take() {
         old.cancelled.store(true, Ordering::SeqCst);
     }
-    let picked = PathBuf::from(&path);
+    let mounts: Vec<PathBuf> = volumes::list().into_iter().map(|v| PathBuf::from(v.mount_point)).collect();
+    let picked = state.grants.lock().check_source(Path::new(&path), &mounts)?;
     if !picked.is_dir() {
         return Err(format!("{path} is not available"));
     }
-    let mounts: Vec<PathBuf> = volumes::list().into_iter().map(|v| PathBuf::from(v.mount_point)).collect();
+    let mounts: Vec<PathBuf> = mounts.iter().filter_map(|m| grants::canon(m).ok()).collect();
     let mount = scan::mount_for(&picked, &mounts);
     let skip_rejected = skip_rejected.unwrap_or(true);
     let include_videos = include_videos.unwrap_or(true);
@@ -177,13 +181,19 @@ struct DedupeArgs {
 }
 
 /// Update destination + templates. A new destination triggers an index walk;
-/// a template change just re-evaluates duplicates.
+/// a template change just re-evaluates duplicates. A destination that was not
+/// chosen in the destination dialog is dropped, and the call reports it.
 #[tauri::command]
-fn set_dedupe_config(app: AppHandle, state: State<'_, AppState>, args: DedupeArgs) {
+fn set_dedupe_config(app: AppHandle, state: State<'_, AppState>, args: DedupeArgs) -> Result<(), String> {
+    let (dest_root, denied) = match args.dest_root.as_deref().map(|d| state.grants.lock().check_dest(Path::new(d))) {
+        Some(Ok(c)) => (Some(c.to_string_lossy().to_string()), None),
+        Some(Err(e)) => (None, Some(e)),
+        None => (None, None),
+    };
     let root_changed = {
         let mut cfg = state.dedupe.cfg.write();
-        let changed = cfg.dest_root != args.dest_root;
-        cfg.dest_root = args.dest_root.clone();
+        let changed = cfg.dest_root != dest_root;
+        cfg.dest_root = dest_root.clone();
         cfg.folder_tpl = args.folder_tpl;
         cfg.name_tpl = args.name_tpl;
         if changed {
@@ -192,13 +202,14 @@ fn set_dedupe_config(app: AppHandle, state: State<'_, AppState>, args: DedupeArg
         changed
     };
     if root_changed {
-        match args.dest_root {
+        match dest_root {
             Some(root) => start_dest_index(&app, &state, root, false),
             None => reevaluate(&state),
         }
     } else {
         reevaluate(&state);
     }
+    denied.map_or(Ok(()), Err)
 }
 
 fn reevaluate(state: &AppState) {
@@ -209,10 +220,20 @@ fn reevaluate(state: &AppState) {
 }
 
 #[tauri::command]
-fn rebuild_dest_index(app: AppHandle, state: State<'_, AppState>) {
-    if let Some(root) = state.dedupe.cfg.read().dest_root.clone() {
-        start_dest_index(&app, &state, root, true);
+fn rebuild_dest_index(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let current = state.dedupe.cfg.read().dest_root.clone();
+    if let Some(root) = current {
+        match state.grants.lock().check_dest(Path::new(&root)) {
+            Ok(c) => start_dest_index(&app, &state, c.to_string_lossy().to_string(), true),
+            Err(e) => {
+                let mut cfg = state.dedupe.cfg.write();
+                cfg.dest_root = None;
+                cfg.dest_ready = false;
+                return Err(e);
+            }
+        }
     }
+    Ok(())
 }
 
 fn start_dest_index(app: &AppHandle, state: &AppState, root: String, rebuild: bool) {
@@ -453,16 +474,77 @@ fn save_video_thumb(state: State<'_, AppState>, gen: u64, item_id: u32, jpeg_bas
 
 /// Subfolders of a folder, for the source tree.
 #[tauri::command]
-async fn list_folders(path: String) -> Vec<scan::FolderEntry> {
-    tauri::async_runtime::spawn_blocking(move || scan::list_folders(Path::new(&path))).await.unwrap_or_default()
+async fn list_folders(state: State<'_, AppState>, path: String) -> Result<Vec<scan::FolderEntry>, String> {
+    let mounts: Vec<PathBuf> = volumes::list().into_iter().map(|v| PathBuf::from(v.mount_point)).collect();
+    // outside the granted sources the tree is empty, not an error: the page
+    // may ask while a card is being ejected
+    let Ok(dir) = state.grants.lock().check_source(Path::new(&path), &mounts) else {
+        return Ok(Vec::new());
+    };
+    Ok(tauri::async_runtime::spawn_blocking(move || scan::list_folders(&dir)).await.unwrap_or_default())
+}
+
+/// Ask for a folder to import from. The dialog opens here, not in the page, so
+/// only a folder the user picked is granted for reading.
+#[tauri::command]
+async fn pick_source(app: AppHandle) -> Result<Option<String>, String> {
+    let picked = pick_folder(app.clone(), "Import from folder", None).await?;
+    let Some(dir) = picked else { return Ok(None) };
+    let state = app.state::<AppState>();
+    let granted = state.grants.lock().grant_source(&dir)?;
+    Ok(Some(granted.to_string_lossy().to_string()))
+}
+
+/// Ask for a folder to import into, remembered across launches.
+#[tauri::command]
+async fn pick_destination(app: AppHandle, default_path: Option<String>) -> Result<Option<String>, String> {
+    let picked = pick_folder(app.clone(), "Import into", default_path.map(PathBuf::from)).await?;
+    let Some(dir) = picked else { return Ok(None) };
+    let state = app.state::<AppState>();
+    let granted = state.grants.lock().grant_dest(&state.catalog, &dir)?;
+    Ok(Some(granted.to_string_lossy().to_string()))
+}
+
+async fn pick_folder(app: AppHandle, title: &'static str, start: Option<PathBuf>) -> Result<Option<PathBuf>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut dialog = app.dialog().file().set_title(title);
+        if let Some(s) = start.filter(|s| s.is_dir()) {
+            dialog = dialog.set_directory(s);
+        }
+        dialog.blocking_pick_folder().map(|p| p.into_path().map_err(|e| e.to_string())).transpose()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Destinations chosen before, that still exist, most recent first.
+#[tauri::command]
+fn list_granted_destinations(state: State<'_, AppState>) -> Vec<String> {
+    state.grants.lock().dests().iter().filter(|d| d.is_dir()).map(|d| d.to_string_lossy().to_string()).collect()
 }
 
 #[tauri::command]
-fn start_import(app: AppHandle, state: State<'_, AppState>, opts: import::ImportOpts) -> Result<(), String> {
+fn forget_destination(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    state.grants.lock().forget_dest(&state.catalog, Path::new(&path))?;
+    let mut cfg = state.dedupe.cfg.write();
+    if cfg.dest_root.as_deref() == Some(path.as_str()) {
+        cfg.dest_root = None;
+        cfg.dest_ready = false;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn start_import(app: AppHandle, state: State<'_, AppState>, mut opts: import::ImportOpts) -> Result<(), String> {
     let session = state.current().ok_or("No source selected")?;
-    if !Path::new(&opts.dest_root).is_dir() {
+    // only a folder chosen in the destination dialog is written to; the
+    // checked path is the one used from here on
+    let dest = state.grants.lock().check_dest(Path::new(&opts.dest_root))?;
+    if !dest.is_dir() {
         return Err(format!("Destination {} does not exist", opts.dest_root));
     }
+    opts.dest_root = dest.to_string_lossy().to_string();
     // Refuse to import onto the source card, even into another folder of it.
     if dest_on_source(Path::new(&opts.dest_root), &session.mount)? {
         return Err("The destination is on the source card. The card is never written to.".into());
@@ -510,7 +592,8 @@ fn spawn_volume_watcher(app: AppHandle) {
 
 /// The importer as a Tauri plugin: its commands (`plugin:immporter|<name>`),
 /// state, and the `thumb://` and `media://` schemes its UI loads from. The
-/// app registers the opener and dialog plugins its UI also uses.
+/// app registers the opener plugin its UI also uses, and the dialog plugin the
+/// folder pickers here open their dialogs with.
 pub fn init(config: Config) -> TauriPlugin<Wry> {
     tauri::plugin::Builder::new("immporter")
         .register_asynchronous_uri_scheme_protocol("thumb", |ctx, request, responder| {
@@ -566,6 +649,9 @@ pub fn init(config: Config) -> TauriPlugin<Wry> {
                     let _ = catalog.set_setting(&done, "1");
                 }
             }
+            // debug builds only: open a source and a destination on launch
+            let dev = |var: &str| if cfg!(debug_assertions) { std::env::var(var).ok().map(PathBuf::from) } else { None };
+            let grants = Grants::load(&catalog, dev("SDI_AUTOLOAD_SOURCE"), dev("SDI_AUTOLOAD_DEST"));
             let immich_settings = load_immich_settings(&catalog);
             if immich_settings.enabled {
                 *dedupe.immich.write() = immich_ctx(&immich_settings, immich::keychain::get_for(&immich_settings, &immich_settings.url));
@@ -574,6 +660,7 @@ pub fn init(config: Config) -> TauriPlugin<Wry> {
                 catalog,
                 thumbs,
                 dedupe,
+                grants: Mutex::new(grants),
                 session: Mutex::new(None),
                 dest_cancel: Mutex::new(Arc::new(AtomicBool::new(false))),
                 import_cancel: Mutex::new(None),
@@ -585,6 +672,10 @@ pub fn init(config: Config) -> TauriPlugin<Wry> {
             dev_autoload_source,
             list_volumes,
             list_folders,
+            pick_source,
+            pick_destination,
+            list_granted_destinations,
+            forget_destination,
             save_video_thumb,
             scan_source,
             close_source,

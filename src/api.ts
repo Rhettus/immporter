@@ -140,7 +140,6 @@ export interface Summary {
 
 export interface Settings {
   destRoot: string | null;
-  recentDests: string[];
   folderTpl: string;
   nameTpl: string;
   importDuplicates: boolean;
@@ -171,7 +170,6 @@ export interface FolderEntry {
 
 export const defaultSettings: Settings = {
   destRoot: null,
-  recentDests: [],
   folderTpl: "{YYYY}/{MMMM}",
   nameTpl: "{original}",
   importDuplicates: false,
@@ -193,6 +191,12 @@ export const api = {
     invoke<ScanResult>("scan_source", { path, includeSubfolders, skipRejected, includeVideos }),
   saveVideoThumb: (gen: number, itemId: number, jpegBase64: string) =>
     invoke<void>("save_video_thumb", { gen, itemId, jpegBase64 }),
+  /** Open the folder dialog (in the backend) and grant what is chosen for reading. */
+  pickSource: () => invoke<string | null>("pick_source"),
+  /** Open the folder dialog (in the backend) and grant what is chosen for importing into. */
+  pickDestination: (defaultPath: string | null) => invoke<string | null>("pick_destination", { defaultPath }),
+  listGrantedDestinations: () => invoke<string[]>("list_granted_destinations"),
+  forgetDestination: (path: string) => invoke<void>("forget_destination", { path }),
   listFolders: (path: string) => invoke<FolderEntry[]>("list_folders", { path }),
   closeSource: () => invoke<void>("close_source"),
   setVisible: (gen: number, start: number, end: number) => invoke<void>("set_visible", { gen, start, end }),
