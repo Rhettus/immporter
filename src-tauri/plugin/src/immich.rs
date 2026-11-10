@@ -36,6 +36,73 @@ pub fn normalize_url(url: &str) -> String {
     u.trim_end_matches('/').to_string()
 }
 
+/// `https://Host:443/api` -> `https://host`: scheme, lowercase host and the
+/// port unless it is the scheme's default. `None` for anything but http(s).
+pub fn origin_of(url: &str) -> Option<String> {
+    let u = reqwest::Url::parse(normalize_url(url).as_str()).ok()?;
+    if !matches!(u.scheme(), "http" | "https") || u.host_str().is_none() {
+        return None;
+    }
+    Some(u.origin().ascii_serialization())
+}
+
+/// What the keychain holds: the key and the server it was saved for.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Stored {
+    pub origin: Option<String>,
+    pub key: String,
+}
+
+pub fn parse_stored(raw: &str) -> Option<Stored> {
+    let s = if raw.trim_start().starts_with('{') {
+        serde_json::from_str::<Stored>(raw).ok()?
+    } else {
+        Stored { origin: None, key: raw.to_string() }
+    };
+    (!s.key.is_empty()).then_some(s)
+}
+
+/// The key to use for `target`, and the origin to write back when a legacy
+/// key was just bound to the saved URL. A key whose origin differs from the
+/// target's is never returned.
+pub fn resolve(stored: Option<Stored>, saved_url: &str, target: &str) -> (Option<String>, Option<String>) {
+    let Some(s) = stored else { return (None, None) };
+    let Some(want) = origin_of(target) else { return (None, None) };
+    let (bound, migrated) = match s.origin {
+        Some(o) => (Some(o), None),
+        None => {
+            let o = origin_of(saved_url);
+            (o.clone(), o)
+        }
+    };
+    if bound.as_deref() == Some(want.as_str()) {
+        (Some(s.key), migrated)
+    } else {
+        (None, None)
+    }
+}
+
+/// What saving settings does with the key. `new_key` is what the page sent;
+/// `have_stored` whether a key exists; `stored_ok` whether it is bound to
+/// the new URL.
+#[derive(Debug, PartialEq)]
+pub enum KeyAction {
+    Bind(String),
+    Keep,
+}
+
+pub fn plan_save(new_key: Option<&str>, have_stored: bool, stored_ok: bool, new_url: &str) -> Result<KeyAction, String> {
+    if let Some(k) = new_key.map(str::trim).filter(|k| !k.is_empty()) {
+        return Ok(KeyAction::Bind(k.to_string()));
+    }
+    if have_stored && !new_url.trim().is_empty() && !stored_ok {
+        return Err(KEY_FOR_OTHER_SERVER.into());
+    }
+    Ok(KeyAction::Keep)
+}
+
+pub const KEY_FOR_OTHER_SERVER: &str = "Enter the API key for this server. The saved key belongs to a different server.";
+
 // ---- API key in the OS keychain --------------------------------------------
 
 pub mod keychain {
@@ -56,23 +123,51 @@ pub mod keychain {
         keyring::Entry::new(service, KEYCHAIN_ACCOUNT).map_err(|e| e.to_string())
     }
 
-    pub fn get() -> Option<String> {
-        entry().ok()?.get_password().ok().filter(|k| !k.is_empty())
+    /// The stored entry. A key saved by an older version is the bare key
+    /// (no `{`; Immich keys never contain one) and has no origin yet.
+    fn read() -> Option<Stored> {
+        parse_stored(&entry().ok()?.get_password().ok()?)
     }
 
-    pub fn set(key: &str) -> Result<(), String> {
-        entry()?.set_password(key).map_err(|e| e.to_string())
+    /// Whether any key is stored, for any server.
+    pub fn exists() -> bool {
+        read().is_some()
+    }
+
+    /// The stored key, only if it belongs to `target`'s origin. `saved_url`
+    /// is the URL in the saved settings: a key stored without an origin is
+    /// bound to it here, once, so existing installs keep working.
+    pub fn get_for(saved_url: &str, target: &str) -> Option<String> {
+        let (key, migrated) = resolve(read(), saved_url, target);
+        if let Some(origin) = migrated {
+            if let Some(k) = &key {
+                let _ = set(&origin, k);
+            }
+        }
+        key
+    }
+
+    /// Store `key`, usable only for the server at `url`.
+    pub fn set_for_url(url: &str, key: &str) -> Result<(), String> {
+        let origin = origin_of(url).ok_or("Enter a valid server URL")?;
+        set(&origin, key)
+    }
+
+    fn set(origin: &str, key: &str) -> Result<(), String> {
+        let raw = serde_json::to_string(&Stored { origin: Some(origin.to_string()), key: key.to_string() })
+            .map_err(|e| e.to_string())?;
+        entry()?.set_password(&raw).map_err(|e| e.to_string())
     }
 
     /// The key kept under another service (an app's identifier before a
     /// rename) moves under this one, unless this one has its own.
     pub fn migrate_from(old: &str) {
-        if get().is_some() {
+        if exists() {
             return;
         }
         let Ok(e) = keyring::Entry::new(old, KEYCHAIN_ACCOUNT) else { return };
-        if let Ok(key) = e.get_password() {
-            if !key.is_empty() && set(&key).is_ok() {
+        if let Ok(raw) = e.get_password() {
+            if parse_stored(&raw).is_some() && entry().and_then(|n| n.set_password(&raw).map_err(|e| e.to_string())).is_ok() {
                 let _ = e.delete_credential();
             }
         }
@@ -154,6 +249,9 @@ fn check_status(resp: reqwest::blocking::Response) -> Result<reqwest::blocking::
         401 => Err("Immich rejected the API key".into()),
         403 => Err(format!("The API key is missing the {REQUIRED_PERMISSION} permission")),
         404 => Err("Not an Immich server (API not found at this URL)".into()),
+        301 | 302 | 303 | 307 | 308 => {
+            Err("The server redirected the request. Use its final URL (for example https instead of http)".into())
+        }
         code => Err(format!("Immich returned HTTP {code}")),
     }
 }
@@ -171,6 +269,8 @@ impl Client {
         let http = reqwest::blocking::Client::builder()
             .default_headers(headers)
             .timeout(Duration::from_secs(15))
+            // a redirect would carry the key to wherever it points
+            .redirect(reqwest::redirect::Policy::none())
             .tls_danger_accept_invalid_certs(accept_invalid_certs)
             .build()
             .map_err(|e| e.to_string())?;
@@ -584,5 +684,83 @@ mod tests {
         s2.mock("GET", "/api/server/ping").with_status(401).create();
         let r = Client::new(&s2.url(), "nope", false).unwrap().test();
         assert!(r.error.unwrap().contains("rejected"));
+    }
+
+    #[test]
+    fn origins_are_normalized() {
+        assert_eq!(origin_of("HTTPS://Photos.Example.com:443/api/").as_deref(), Some("https://photos.example.com"));
+        assert_eq!(origin_of("http://nas:2283").as_deref(), Some("http://nas:2283"));
+        assert_eq!(origin_of("http://nas:80").as_deref(), Some("http://nas"));
+        assert_eq!(origin_of("ftp://x"), None);
+        assert_eq!(origin_of(""), None);
+    }
+
+    fn bound(origin: &str) -> Option<Stored> {
+        Some(Stored { origin: Some(origin.into()), key: "secret".into() })
+    }
+
+    #[test]
+    fn stored_key_only_for_its_origin() {
+        let saved = "https://photos.example.com";
+        let (k, m) = resolve(bound("https://photos.example.com"), saved, "https://Photos.example.com/api");
+        assert_eq!((k.as_deref(), m), (Some("secret"), None));
+        for other in ["https://evil.example", "http://photos.example.com", "https://photos.example.com:8443", "junk"] {
+            assert_eq!(resolve(bound("https://photos.example.com"), saved, other), (None, None), "{other}");
+        }
+    }
+
+    #[test]
+    fn legacy_key_binds_to_saved_url() {
+        let legacy = parse_stored("plainkey");
+        assert_eq!(legacy, Some(Stored { origin: None, key: "plainkey".into() }));
+        let saved = "https://photos.example.com/";
+        // another target never gets it, and nothing is bound by asking
+        assert_eq!(resolve(legacy.clone(), saved, "https://evil.example"), (None, None));
+        let (k, m) = resolve(legacy.clone(), saved, "https://photos.example.com");
+        assert_eq!((k.as_deref(), m.as_deref()), (Some("plainkey"), Some("https://photos.example.com")));
+        // no saved URL: nothing to bind to
+        assert_eq!(resolve(legacy, "", "https://photos.example.com"), (None, None));
+        let json = parse_stored(r#"{"origin":"https://a","key":"k"}"#).unwrap();
+        assert_eq!(json.origin.as_deref(), Some("https://a"));
+        assert!(parse_stored("").is_none());
+    }
+
+    #[test]
+    fn saving_a_new_origin_needs_a_key() {
+        // changed origin, key not valid for it: refused
+        assert_eq!(plan_save(None, true, false, "https://evil.example"), Err(KEY_FOR_OTHER_SERVER.into()));
+        assert_eq!(plan_save(Some("  "), true, false, "https://evil.example"), Err(KEY_FOR_OTHER_SERVER.into()));
+        // a new key binds
+        assert_eq!(plan_save(Some(" new "), true, false, "https://b"), Ok(KeyAction::Bind("new".into())));
+        // same origin keeps the key
+        assert_eq!(plan_save(None, true, true, "https://a"), Ok(KeyAction::Keep));
+        // nothing stored, or no URL: nothing to protect
+        assert_eq!(plan_save(None, false, false, "https://b"), Ok(KeyAction::Keep));
+        assert_eq!(plan_save(None, true, false, ""), Ok(KeyAction::Keep));
+    }
+
+    #[test]
+    fn redirects_are_not_followed_and_key_not_forwarded() {
+        let mut target = mockito::Server::new();
+        let leaked = target.mock("GET", "/api/server/ping").match_header("x-api-key", "secret").expect(0).create();
+        let mut origin = mockito::Server::new();
+        origin
+            .mock("GET", "/api/server/ping")
+            .with_status(302)
+            .with_header("location", &format!("{}/api/server/ping", target.url()))
+            .create();
+        let r = Client::new(&origin.url(), "secret", false).unwrap().test();
+        assert!(r.error.unwrap().contains("redirected"));
+        leaked.assert();
+    }
+
+    #[test]
+    fn same_origin_sends_the_key() {
+        let mut server = mockito::Server::new();
+        let m = server.mock("GET", "/api/server/ping").match_header("x-api-key", "secret").with_status(500).create();
+        let url = server.url();
+        let (k, _) = resolve(bound(&origin_of(&url).unwrap()), &url, &url);
+        let _ = Client::new(&url, &k.unwrap(), false).unwrap().test();
+        m.assert();
     }
 }

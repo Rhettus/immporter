@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, CircleAlert, KeyRound, Loader2, X } from "lucide-react";
 import { api, ImmichSettings, ImmichTestResult } from "../api";
-import { EMPTY, insecureRemote, suggestPrefix } from "../immich-form";
+import { EMPTY, insecureRemote, serverChanged, suggestPrefix } from "../immich-form";
 import { useStore } from "../store";
 import { Overlay, Section, Toggle } from "./ui";
 
@@ -14,6 +14,7 @@ export default function SettingsDialog() {
 
   const [form, setForm] = useState<ImmichSettings>(EMPTY);
   const [hasKey, setHasKey] = useState(false);
+  const [savedUrl, setSavedUrl] = useState("");
   const [permission, setPermission] = useState("asset.read");
   const [apiKey, setApiKey] = useState("");
   const [replacingKey, setReplacingKey] = useState(false);
@@ -31,6 +32,7 @@ export default function SettingsDialog() {
     setReplacingKey(false);
     api.getImmichSettings().then(({ hasKey, requiredPermission, ...s }) => {
       setForm(s);
+      setSavedUrl(s.url);
       setHasKey(hasKey);
       setPermission(requiredPermission);
     });
@@ -47,7 +49,8 @@ export default function SettingsDialog() {
   if (!open) return null;
 
   const update = (patch: Partial<ImmichSettings>) => setForm((f) => ({ ...f, ...patch }));
-  const keyInput = !hasKey || replacingKey;
+  const newServer = hasKey && serverChanged(savedUrl, form.url);
+  const keyInput = !hasKey || replacingKey || newServer;
   const keyToSend = keyInput && apiKey.trim() ? apiKey.trim() : null;
   const prefix = form.pathPrefix.trim().replace(/\/+$/, "");
   const expectedPath = prefix ? `${prefix}/${exampleRel}` : `…/${exampleRel}`;
@@ -123,7 +126,7 @@ export default function SettingsDialog() {
                 <input
                   type="password"
                   value={apiKey}
-                  placeholder={hasKey ? "New API key" : "Paste API key"}
+                  placeholder={newServer ? "API key for this server" : hasKey ? "New API key" : "Paste API key"}
                   onChange={(e) => setApiKey(e.target.value)}
                   className="input font-mono"
                 />
@@ -138,6 +141,9 @@ export default function SettingsDialog() {
                     Remove
                   </button>
                 </div>
+              )}
+              {newServer && (
+                <p className="text-[11px] text-warning">The saved key is for another server. Enter the key for this one.</p>
               )}
               <p className="text-[11px] leading-relaxed text-text-secondary">
                 In Immich, open <b>Account Settings → API Keys</b> and create a key with only the{" "}
@@ -156,7 +162,7 @@ export default function SettingsDialog() {
             <div className="flex items-start gap-3">
               <button
                 onClick={runTest}
-                disabled={testing || !form.url}
+                disabled={testing || !form.url || (newServer && !keyToSend)}
                 className="shrink-0 whitespace-nowrap rounded-md bg-surface px-3 py-1.5 hover:bg-card-active disabled:opacity-40"
               >
                 {testing ? (

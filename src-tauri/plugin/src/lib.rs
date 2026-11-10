@@ -329,8 +329,8 @@ pub fn immich_connection(app: &AppHandle) -> Option<ImmichConnection> {
         return None;
     }
     Some(ImmichConnection {
-        url: settings.url,
-        api_key: immich::keychain::get()?,
+        url: settings.url.clone(),
+        api_key: immich::keychain::get_for(&settings.url, &settings.url)?,
         accept_invalid_certs: settings.accept_invalid_certs,
     })
 }
@@ -346,26 +346,32 @@ struct ImmichSettingsView {
 
 #[tauri::command]
 fn get_immich_settings(state: State<'_, AppState>) -> ImmichSettingsView {
+    let settings = load_immich_settings(&state.catalog);
     ImmichSettingsView {
-        settings: load_immich_settings(&state.catalog),
-        has_key: immich::keychain::get().is_some(),
+        has_key: immich::keychain::get_for(&settings.url, &settings.url).is_some(),
+        settings,
         required_permission: immich::REQUIRED_PERMISSION,
     }
 }
 
-/// Save settings; a non-empty `api_key` replaces the stored key. The key is
-/// kept in the OS keychain and never returned to the UI.
+/// Save settings; a non-empty `api_key` replaces the stored key and binds it
+/// to the new URL's origin. The key is kept in the OS keychain and never
+/// returned to the UI. Without a new key, a URL on another origin is refused,
+/// so the saved key can never be sent to a server it was not saved for.
 #[tauri::command]
 fn save_immich_settings(state: State<'_, AppState>, mut settings: ImmichSettings, api_key: Option<String>) -> Result<(), String> {
+    let saved_url = load_immich_settings(&state.catalog).url;
     settings.url = immich::normalize_url(&settings.url);
-    if let Some(k) = api_key.as_deref().map(str::trim).filter(|k| !k.is_empty()) {
-        immich::keychain::set(k)?;
+    let stored_ok = immich::keychain::get_for(&saved_url, &settings.url).is_some();
+    match immich::plan_save(api_key.as_deref(), immich::keychain::exists(), stored_ok, &settings.url)? {
+        immich::KeyAction::Bind(k) => immich::keychain::set_for_url(&settings.url, &k)?,
+        immich::KeyAction::Keep => {}
     }
     state
         .catalog
         .set_setting(IMMICH_SETTINGS_KEY, &serde_json::to_string(&settings).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
-    let ctx = if settings.enabled { immich_ctx(&settings, immich::keychain::get()) } else { None };
+    let ctx = if settings.enabled { immich_ctx(&settings, immich::keychain::get_for(&settings.url, &settings.url)) } else { None };
     *state.dedupe.immich.write() = ctx;
     reevaluate(&state);
     Ok(())
@@ -381,11 +387,18 @@ fn forget_immich_key(state: State<'_, AppState>) -> Result<(), String> {
 
 /// Test a connection. Uses `api_key` if given, else the stored key.
 #[tauri::command]
-async fn test_immich(settings: ImmichSettings, api_key: Option<String>) -> immich::TestResult {
-    tauri::async_runtime::spawn_blocking(move || {
-        let key = api_key.filter(|k| !k.trim().is_empty()).or_else(immich::keychain::get);
+async fn test_immich(state: State<'_, AppState>, settings: ImmichSettings, api_key: Option<String>) -> Result<immich::TestResult, String> {
+    let saved_url = load_immich_settings(&state.catalog).url;
+    Ok(tauri::async_runtime::spawn_blocking(move || {
+        // the stored key goes only to the server it was saved for
+        let key = api_key.filter(|k| !k.trim().is_empty()).or_else(|| immich::keychain::get_for(&saved_url, &settings.url));
         let Some(key) = key else {
-            return immich::TestResult { error: Some("Enter an API key".into()), ..Default::default() };
+            let msg = if immich::keychain::exists() && !settings.url.trim().is_empty() {
+                immich::KEY_FOR_OTHER_SERVER
+            } else {
+                "Enter an API key"
+            };
+            return immich::TestResult { error: Some(msg.into()), ..Default::default() };
         };
         match immich::Client::new(&settings.url, &key, settings.accept_invalid_certs) {
             Ok(c) => c.test(),
@@ -393,7 +406,7 @@ async fn test_immich(settings: ImmichSettings, api_key: Option<String>) -> immic
         }
     })
     .await
-    .unwrap_or_default()
+    .unwrap_or_default())
 }
 
 fn dest_on_source(dest: &Path, source_mount: &Path) -> Result<bool, String> {
@@ -540,7 +553,7 @@ pub fn init(config: Config) -> TauriPlugin<Wry> {
             }
             let immich_settings = load_immich_settings(&catalog);
             if immich_settings.enabled {
-                *dedupe.immich.write() = immich_ctx(&immich_settings, immich::keychain::get());
+                *dedupe.immich.write() = immich_ctx(&immich_settings, immich::keychain::get_for(&immich_settings.url, &immich_settings.url));
             }
             app.manage(AppState {
                 catalog,
