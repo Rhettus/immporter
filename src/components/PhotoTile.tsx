@@ -109,7 +109,7 @@ function PhotoTile({ item, size, visibleIds }: Props) {
             className={`absolute left-2 top-2 flex h-[22px] w-[22px] items-center justify-center rounded-[5px] border-[1.5px] ${
               isSelected
                 ? "border-accent bg-accent text-button-text"
-                : "border-text-primary/80 bg-black/45 hover:bg-black/70"
+                : "border-white/80 bg-black/45 hover:bg-black/70"
             }`}
           >
             {isSelected && <Check size={14} strokeWidth={3.5} />}
@@ -121,7 +121,7 @@ function PhotoTile({ item, size, visibleIds }: Props) {
           {item.status === "duplicate" && <Badge icon={<Copy size={11} />} text="Imported" />}
           {item.status === "deleted" && <Badge icon={<Trash2 size={11} />} text="Deleted" />}
           {item.status !== "in_immich" && immichMatch && (
-            <span title="Also in Immich" className="flex items-center rounded bg-black/70 px-1.5 py-0.5 text-text-primary">
+            <span title="Also in Immich" className="flex items-center rounded bg-black/70 px-1.5 py-0.5 text-white">
               <Cloud size={11} />
             </span>
           )}
@@ -140,18 +140,18 @@ function PhotoTile({ item, size, visibleIds }: Props) {
         {outcome && (
           <div className="absolute bottom-2 right-2">
             {outcome.outcome === "failed" ? (
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-danger text-black">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-danger text-button-text">
                 <CircleAlert size={15} />
               </span>
             ) : outcome.outcome !== "skipped" ? (
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-success text-black">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-success text-button-text">
                 <Check size={15} strokeWidth={3} />
               </span>
             ) : null}
           </div>
         )}
 
-        <span className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-text-primary">
+        <span className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-white">
           {item.kind === "video" ? (
             <span className="flex items-center gap-1">
               <Play size={10} fill="currentColor" />
@@ -187,7 +187,7 @@ function PhotoTile({ item, size, visibleIds }: Props) {
 
 function Badge({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
-    <span className="flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-text-primary">
+    <span className="flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
       {icon}
       {text}
     </span>

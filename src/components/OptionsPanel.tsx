@@ -81,7 +81,7 @@ export default function OptionsPanel() {
         <Section title="Destination">
           <div className="flex gap-2">
             <select
-              className="min-w-0 flex-1 truncate rounded-md border border-border-color bg-surface px-2 py-1.5 outline-none focus:border-text-secondary"
+              className="min-w-0 flex-1 truncate rounded-md border border-border-color bg-surface ps-2 pe-7 py-1.5 text-text-primary outline-none focus:border-text-secondary"
               value={settings.destRoot ?? ""}
               onChange={(e) => (e.target.value === "__browse" ? chooseDest() : setDest(e.target.value))}
             >
@@ -102,7 +102,7 @@ export default function OptionsPanel() {
 
         <Section title="Folder structure">
           <select
-            className="w-full rounded-md border border-border-color bg-surface px-2 py-1.5 outline-none"
+            className="w-full rounded-md border border-border-color bg-surface ps-2 pe-7 py-1.5 text-text-primary outline-none focus:border-text-secondary"
             value={folderPreset ? settings.folderTpl : "__custom"}
             onChange={(e) => e.target.value !== "__custom" && update({ folderTpl: e.target.value })}
           >
@@ -118,7 +118,7 @@ export default function OptionsPanel() {
 
         <Section title="File naming">
           <select
-            className="w-full rounded-md border border-border-color bg-surface px-2 py-1.5 outline-none"
+            className="w-full rounded-md border border-border-color bg-surface ps-2 pe-7 py-1.5 text-text-primary outline-none focus:border-text-secondary"
             value={namePreset ? settings.nameTpl : "__custom"}
             onChange={(e) => e.target.value !== "__custom" && update({ nameTpl: e.target.value })}
           >

@@ -54,6 +54,23 @@
     border-radius: 0;
     opacity: 1;
   }
+  :where(.immporter) select {
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+    background-position: right 13px center, right 8px center;
+  }
+  :where(.immporter) select:dir(rtl) {
+    background-position: left 8px center, left 13px center;
+  }
+  :where(.immporter) select:disabled { opacity: 0.4; }
+  :where(.immporter) select option {
+    background-color: var(--app-surface);
+    color: var(--app-text-primary);
+  }
   :where(.immporter) :is(button, [role="button"]) { cursor: pointer; }
   :where(.immporter) :disabled { cursor: default; }
   :where(.immporter) ::-webkit-scrollbar { width: 10px; height: 10px; }

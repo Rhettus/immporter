@@ -18,6 +18,7 @@ export type ItemOutcome = "imported" | "already_present" | "skipped" | "failed";
 
 interface State {
   volumes: Volume[];
+  refreshSeq: number;
   source: string | null;
   sourceRoot: string | null;
   scanning: boolean;
@@ -58,6 +59,7 @@ interface State {
   setVolumes: (v: Volume[]) => void;
   refreshGranted: () => Promise<string[]>;
   openSource: (path: string) => Promise<void>;
+  refreshSource: () => Promise<void>;
   applyUpdates: (gen: number, items: ItemView[]) => void;
   highlight: (id: number, mode: "single" | "range" | "add", visibleIds: number[]) => void;
   highlightAll: (ids: number[]) => void;
@@ -127,10 +129,21 @@ function autoSelect(items: ItemView[], selected: Set<number>, touched: Set<numbe
   return next;
 }
 
+/** Whether `path` equals or sits inside `mountPoint`, on POSIX or Windows. */
+export function isOnVolume(path: string, mountPoint: string): boolean {
+  return (
+    path === mountPoint ||
+    path.startsWith(mountPoint.endsWith("/") || mountPoint.endsWith("\\") ? mountPoint : mountPoint + "/") ||
+    path.startsWith(mountPoint.endsWith("\\") ? mountPoint : mountPoint + "\\")
+  );
+}
+
 let saveTimer: number | undefined;
+let openReq = 0;
 
 export const useStore = create<State>((set, get) => ({
   volumes: [],
+  refreshSeq: 0,
   source: null,
   sourceRoot: null,
   scanning: false,
@@ -163,6 +176,7 @@ export const useStore = create<State>((set, get) => ({
   setVolumes: (volumes) => set({ volumes }),
 
   openSource: async (path) => {
+    const req = ++openReq;
     set({
       source: path,
       // A new source starts on "All", so nothing new is hidden by an old filter.
@@ -180,7 +194,7 @@ export const useStore = create<State>((set, get) => ({
     try {
       const { includeSubfolders, skipRejected, includeVideos } = get().settings;
       const r = await api.scanSource(path, includeSubfolders, skipRejected, includeVideos);
-      if (get().source !== path) return;
+      if (req !== openReq || get().source !== path) return;
       const { settings } = get();
       set({
         gen: r.gen,
@@ -190,7 +204,40 @@ export const useStore = create<State>((set, get) => ({
         selected: autoSelect(r.items, new Set(), new Set(), settings),
       });
     } catch (e) {
-      if (get().source === path) set({ scanning: false, scanError: String(e) });
+      if (req === openReq && get().source === path) set({ scanning: false, scanError: String(e) });
+    }
+  },
+
+  refreshSource: async () => {
+    const srcBefore = get().source;
+    const prevVolumes = get().volumes;
+    const v = await api.listVolumes();
+    set((st) => ({ volumes: v, refreshSeq: st.refreshSeq + 1 }));
+    const s = get();
+    if (!srcBefore || s.source !== srcBefore || s.importing) return;
+    const wasVolume = prevVolumes.some((x) => isOnVolume(srcBefore, x.mountPoint));
+    const matchedVol = v
+      .filter((x) => isOnVolume(srcBefore, x.mountPoint))
+      .sort((a, b) => b.mountPoint.length - a.mountPoint.length)[0];
+    if (wasVolume && !matchedVol) {
+      set({
+        source: null,
+        sourceRoot: null,
+        items: [],
+        selected: new Set(),
+        highlighted: new Set(),
+        touched: new Set(),
+        anchor: null,
+        outcomes: new Map(),
+        summary: null,
+        scanError: null,
+      });
+      api.closeSource();
+      return;
+    }
+    await get().openSource(srcBefore);
+    if (get().source === srcBefore && get().scanError && matchedVol && matchedVol.mountPoint !== srcBefore) {
+      await get().openSource(matchedVol.mountPoint);
     }
   },
 

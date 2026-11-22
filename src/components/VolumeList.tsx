@@ -64,7 +64,7 @@ export default function VolumeList() {
         <button
           onClick={chooseFolder}
           disabled={importing}
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-surface px-3 py-2 text-text-secondary transition-colors hover:bg-card-active hover:text-text-primary disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-border-color bg-surface px-3 py-2 text-text-secondary transition-colors hover:bg-card-active hover:text-text-primary disabled:opacity-50"
         >
           <FolderOpen size={15} /> Choose folder…
         </button>
@@ -126,6 +126,7 @@ function FolderChildren({
   disabled: boolean;
   auto?: AutoOpen;
 }) {
+  const refreshSeq = useStore((s) => s.refreshSeq);
   const [folders, setFolders] = useState<FolderEntry[] | null>(null);
   useEffect(() => {
     let live = true;
@@ -133,7 +134,7 @@ function FolderChildren({
     return () => {
       live = false;
     };
-  }, [path]);
+  }, [path, refreshSeq]);
   if (folders === null) {
     return <div className="py-1 text-[11px] text-text-secondary" style={{ paddingLeft: depth * 14 + 22 }}>…</div>;
   }

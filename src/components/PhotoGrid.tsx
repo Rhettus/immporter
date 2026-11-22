@@ -169,7 +169,7 @@ export default function PhotoGrid() {
             value={sortBy}
             onChange={(e) => updateSettings({ sortBy: e.target.value as SortBy })}
             title="Sort order"
-            className="rounded-md border border-border-color bg-surface px-1.5 py-1 text-[12px] outline-none"
+            className="rounded-md border border-border-color bg-surface ps-2 pe-7 py-1 text-[12px] text-text-primary outline-none focus:border-text-secondary"
           >
             <option value="capture">Capture time</option>
             <option value="name">File name</option>
@@ -246,7 +246,7 @@ export default function PhotoGrid() {
                 style={{ top: row.start + pad, left: pad, gap: GAP, height: cell + LABEL_H }}
               >
                 {visible.slice(row.index * cols, row.index * cols + cols).map((item) => (
-                  <PhotoTile key={item.id} item={item} size={cell} visibleIds={visibleIds} />
+                  <PhotoTile key={`${gen}-${item.id}`} item={item} size={cell} visibleIds={visibleIds} />
                 ))}
               </div>
             ))}

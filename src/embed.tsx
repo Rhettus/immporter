@@ -53,6 +53,9 @@ export function ImmporterView({ onOpenSettings, onImportDone, onShowImported }: 
 /** Read the Immich settings again, after the host's settings changed them. */
 export const reloadImmich = () => useStore.getState().loadImmich();
 
+/** Refresh mounted volumes, folder tree and rescan the current source. */
+export const refreshImporter = () => useStore.getState().refreshSource();
+
 /** Whether an import is running, for a host that must not close the view. */
 export const useImporting = () => useStore((s) => s.importing);
 

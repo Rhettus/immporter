@@ -47,6 +47,29 @@
     color: inherit;
   }
 
+  select {
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+    background-position: right 13px center, right 8px center;
+  }
+
+  select:dir(rtl) {
+    background-position: left 8px center, left 13px center;
+  }
+
+  select:disabled {
+    opacity: 0.4;
+  }
+
+  select option {
+    background-color: var(--app-surface);
+    color: var(--app-text-primary);
+  }
+
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;

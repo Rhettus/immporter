@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { api, DestIndexEvent, ImmichStatus, ImportFileEvent, ImportProgress, ItemView, on, Summary, Volume } from "./api";
-import { useStore } from "./store";
+import { isOnVolume, useStore } from "./store";
 import VolumeList from "./components/VolumeList";
 import PhotoGrid from "./components/PhotoGrid";
 import OptionsPanel from "./components/OptionsPanel";
@@ -16,19 +16,29 @@ export function Shell() {
     s().loadSettings();
     s().loadImmich();
     api.devAutoloadSource().then((src) => {
-      if (src) s().openSource(src);
+      if (src && !s().source) s().openSource(src);
     });
-    api.listVolumes().then(s().setVolumes);
+    void s().refreshSource();
     const subs = [
       on<Volume[]>("volumes-changed", (v) => {
         const src = s().source;
-        const onVolume = (mp: string) => src === mp || src?.startsWith(mp.endsWith("/") ? mp : mp + "/");
-        const wasVolume = s().volumes.some((x) => onVolume(x.mountPoint));
-        s().setVolumes(v);
+        const wasVolume = src !== null && s().volumes.some((x) => isOnVolume(src, x.mountPoint));
+        useStore.setState((st) => ({ volumes: v, refreshSeq: st.refreshSeq + 1 }));
         // The card was ejected (source is the card or a folder on it): drop the
         // grid, unless an import is reporting on it.
-        if (src && wasVolume && !v.some((x) => onVolume(x.mountPoint)) && !s().importing) {
-          useStore.setState({ source: null, items: [], selected: new Set() });
+        if (src && wasVolume && !v.some((x) => isOnVolume(src, x.mountPoint)) && !s().importing) {
+          useStore.setState({
+            source: null,
+            sourceRoot: null,
+            items: [],
+            selected: new Set(),
+            highlighted: new Set(),
+            touched: new Set(),
+            anchor: null,
+            outcomes: new Map(),
+            summary: null,
+            scanError: null,
+          });
           api.closeSource();
         }
       }),
@@ -41,6 +51,7 @@ export function Shell() {
     ];
     return () => {
       subs.forEach((p) => p.then((un) => un()));
+      if (!useStore.getState().importing) api.closeSource();
     };
   }, []);
 
