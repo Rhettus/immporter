@@ -66,9 +66,40 @@ fn hex(h: blake3::Hash) -> String {
     h.to_hex().to_string()
 }
 
+#[cfg(target_os = "macos")]
+fn sync_unsupported(error: &io::Error) -> bool {
+    matches!(error.raw_os_error(), Some(libc::ENOTSUP) | Some(libc::EOPNOTSUPP))
+}
+
+fn sync_destination(file: &File) -> io::Result<()> {
+    let result = file.sync_all();
+    #[cfg(target_os = "macos")]
+    if result.as_ref().is_err_and(sync_unsupported) {
+        use std::os::fd::AsRawFd;
+
+        // Some NAS mounts support fsync but reject sync_all's F_FULLFSYNC.
+        loop {
+            if unsafe { libc::fsync(file.as_raw_fd()) } == 0 {
+                return Ok(());
+            }
+            let error = io::Error::last_os_error();
+            if error.kind() != io::ErrorKind::Interrupted {
+                return Err(error);
+            }
+        }
+    }
+    result
+}
+
 #[cfg(unix)]
 fn fsync_dir(dir: &Path) -> io::Result<()> {
-    File::open(dir)?.sync_all()
+    let result = sync_destination(&File::open(dir)?);
+    #[cfg(target_os = "macos")]
+    if result.as_ref().is_err_and(sync_unsupported) {
+        // A server can flush the file while providing no directory flush.
+        return Ok(());
+    }
+    result
 }
 
 #[cfg(not(unix))]
@@ -144,7 +175,7 @@ fn copy_hashing(src: &Path, temp: &Path, nocache: bool, attempt: u32, fault: Fau
         total += n as u64;
         on_bytes(n as u64);
     }
-    out.sync_all()?;
+    sync_destination(&out)?;
     drop(out);
     // The page cache may still hold the pages on Linux; drop them post-fsync.
     readonly::drop_cache(&File::open(temp)?);
